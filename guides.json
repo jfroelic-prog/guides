@@ -1,1 +1,10 @@
-[]
+[
+ {
+  "file": "_test-guide.html",
+  "title": "Publish Test",
+  "desc": "A throwaway guide to verify publishing works.",
+  "steps": null,
+  "updated": "2026-06-06T08:42:00-05:00",
+  "text": "Publish Test If you can read this online, publishing works."
+ }
+]
