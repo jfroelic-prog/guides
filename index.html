@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guides</title>
+<style>
+  :root{ --paper:#f7f2e9; --card:#fffdf8; --ink:#211d17; --muted:#7c7466;
+         --line:#e6decd; --accent:#d23f31; --teal:#0e6b58; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--paper); color:var(--ink);
+        font:16px/1.55 -apple-system,"Segoe UI","Public Sans",sans-serif;
+        background-image:radial-gradient(rgba(120,100,60,.05) 1px, transparent 1px);
+        background-size:22px 22px; }
+  main{ max-width:780px; margin:0 auto; padding:56px 22px 100px; }
+  h1{ font-size:clamp(30px,5vw,44px); margin:0 0 6px; letter-spacing:-.01em; }
+  h1 span{ color:var(--accent); }
+  .sub{ color:var(--muted); margin:0 0 28px; }
+  #q{ width:100%; padding:14px 18px; font:inherit; border:1px solid var(--line);
+      border-radius:12px; background:var(--card); outline:none; margin-bottom:26px;
+      box-shadow:0 8px 24px -18px rgba(60,45,20,.4); }
+  #q:focus{ border-color:var(--teal); }
+  a.guide{ display:block; text-decoration:none; color:inherit; background:var(--card);
+      border:1px solid var(--line); border-radius:12px; padding:16px 20px; margin-bottom:14px;
+      box-shadow:0 8px 24px -18px rgba(60,45,20,.35); transition:.12s; }
+  a.guide:hover{ transform:translateY(-2px); border-color:var(--teal); }
+  a.guide h2{ margin:0; font-size:18px; }
+  a.guide p{ margin:4px 0 0; color:var(--muted); font-size:14px; }
+  a.guide .meta{ font-size:12px; color:var(--muted); margin-top:6px; }
+  a.guide .snip{ font-size:13px; color:var(--muted); margin:6px 0 0; font-style:italic; }
+  a.guide .snip mark{ background:#f3dca6; color:var(--ink); border-radius:3px; padding:0 2px; font-style:normal; }
+  .none{ color:var(--muted); text-align:center; padding:40px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>How-to <span>Guides</span></h1>
+  <p class="sub">Step-by-step instructions with screenshots. Pick a guide or search below.</p>
+  <input id="q" type="search" placeholder="Search guides…" autofocus>
+  <div id="list"><p class="none">Loading…</p></div>
+</main>
+<script>
+let guides = [];
+const list = document.getElementById("list");
+const q = document.getElementById("q");
+
+fetch("guides.json?v=" + Date.now())
+  .then(r => r.json())
+  .then(g => { guides = g; show(guides); })
+  .catch(() => list.innerHTML =
+    '<p class="none">No guide index yet — it appears automatically about a minute after the first guide is uploaded.</p>');
+
+function show(items, term) {
+  if (!items.length) { list.innerHTML = '<p class="none">No guides match that search.</p>'; return; }
+  list.innerHTML = "";
+  for (const g of items) {
+    const a = document.createElement("a");
+    a.className = "guide";
+    a.href = g.file;
+    const h = document.createElement("h2"); h.textContent = g.title;
+    a.append(h);
+    if (g.desc) { const p = document.createElement("p"); p.textContent = g.desc; a.append(p); }
+
+    // If the match came from inside the guide's steps, show that snippet.
+    if (term && g.text) {
+      const i = g.text.toLowerCase().indexOf(term);
+      const inTitle = (g.title + " " + (g.desc || "")).toLowerCase().includes(term);
+      if (i > -1 && !inTitle) {
+        const start = Math.max(0, i - 55);
+        const snip = document.createElement("p");
+        snip.className = "snip";
+        const before = (start ? "…" : "") + g.text.slice(start, i);
+        const hit = g.text.slice(i, i + term.length);
+        const after = g.text.slice(i + term.length, i + term.length + 70) + "…";
+        snip.append(before);
+        const b = document.createElement("mark"); b.textContent = hit;
+        snip.append(b, after);
+        a.append(snip);
+      }
+    }
+
+    const m = document.createElement("div"); m.className = "meta";
+    m.textContent = (g.steps ? g.steps + " steps · " : "") +
+                    (g.updated ? "updated " + new Date(g.updated).toLocaleDateString() : "");
+    a.append(m);
+    list.append(a);
+  }
+}
+
+q.oninput = () => {
+  const t = q.value.trim().toLowerCase();
+  show(!t ? guides : guides.filter(g =>
+    (g.title + " " + (g.desc || "") + " " + g.file + " " + (g.text || ""))
+      .toLowerCase().includes(t)), t);
+};
+</script>
+</body>
+</html>
