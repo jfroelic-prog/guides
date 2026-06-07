@@ -10,6 +10,9 @@ for f in sorted(glob.glob("*.html")):
         head = open(f, encoding="utf-8", errors="ignore").read(200_000)
     except OSError:
         continue
+    # "Unlisted" guides stay live at their URL but are kept off the homepage.
+    if re.search(r'<meta name="stepsnap-unlisted" content="1"', head):
+        continue
     t = re.search(r"<title>(.*?)</title>", head, re.S)
     d = re.search(r'<meta name="description" content="(.*?)"', head)
     n = re.search(r'<meta name="stepsnap-steps" content="(\d+)"', head)
