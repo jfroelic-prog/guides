@@ -40,6 +40,15 @@
   a.guide .meta{ font-size:12px; color:var(--muted); margin-top:auto; padding-top:6px; }
   a.guide .snip{ font-size:12.5px; color:var(--muted); font-style:italic; }
   a.guide .snip mark{ background:#f3dca6; color:var(--ink); border-radius:3px; padding:0 2px; font-style:normal; }
+  /* Per-tile "copy link" button (sits over the cover, doesn't trigger the tile link) */
+  .card{ position:relative; display:flex; }
+  .card a.guide{ width:100%; }
+  .copylink{ position:absolute; top:10px; right:10px; z-index:2; border:0; cursor:pointer;
+    background:rgba(33,29,23,.72); color:#fff; font:600 12px inherit;
+    padding:6px 11px; border-radius:999px; opacity:0; transition:opacity .12s, background .12s; }
+  .card:hover .copylink, .copylink:focus{ opacity:1; }
+  .copylink:hover{ background:var(--teal); }
+  @media (hover: none){ .copylink{ opacity:1; } }
   .none{ grid-column:1/-1; color:var(--muted); text-align:center; padding:40px 0; }
 </style>
 </head>
@@ -65,6 +74,8 @@ function show(items, term) {
   if (!items.length) { list.innerHTML = '<p class="none">No guides match that search.</p>'; return; }
   list.innerHTML = "";
   for (const g of items) {
+    const card = document.createElement("div");
+    card.className = "card";
     const a = document.createElement("a");
     a.className = "guide";
     a.href = g.file;
@@ -112,8 +123,65 @@ function show(items, term) {
                     (g.updated ? "updated " + new Date(g.updated).toLocaleDateString() : "");
     body.append(m);
     a.append(body);
-    list.append(a);
+    card.append(a);
+
+    // "Copy link" — copies the guide's real shareable URL (works even when this
+    // page is embedded in a Google Site, where the address bar shows Google's URL).
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "copylink";
+    copy.textContent = "🔗 Copy link";
+    copy.title = "Copy this guide's shareable link";
+    copy.onclick = (e) => { e.preventDefault(); e.stopPropagation(); copyGuideLink(g, copy); };
+    card.append(copy);
+
+    list.append(card);
   }
+}
+
+// Resolve a guide's filename to its absolute github.io URL and copy it.
+async function copyGuideLink(g, btn) {
+  const url = new URL(g.file, location.href).href;
+  const label = btn.textContent;
+  if (await copyText(url)) {
+    btn.textContent = "✓ Copied!";
+    setTimeout(() => (btn.textContent = label), 1600);
+  } else {
+    // Modal-free fallback (works in any embed): reveal the link, pre-selected.
+    const inp = document.createElement("input");
+    inp.className = "copylink";
+    inp.readOnly = true;
+    inp.value = url;
+    inp.style.width = "190px";
+    inp.style.opacity = "1";
+    inp.title = "Press Ctrl/Cmd-C to copy";
+    btn.replaceWith(inp);
+    inp.focus();
+    inp.select();
+  }
+}
+
+// Clipboard with a fallback for restrictive embeds (Google Sites iframe).
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) { /* fall through to the legacy method */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "-1000px";
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch (e) { return false; }
 }
 
 q.oninput = () => {
