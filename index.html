@@ -119,7 +119,8 @@ function show(items, term) {
     }
 
     const m = document.createElement("div"); m.className = "meta";
-    m.textContent = (g.steps ? g.steps + " steps · " : "") +
+    m.textContent = (g.author ? "by " + g.author + " · " : "") +
+                    (g.steps ? g.steps + " steps · " : "") +
                     (g.updated ? "updated " + new Date(g.updated).toLocaleDateString() : "");
     body.append(m);
     a.append(body);
