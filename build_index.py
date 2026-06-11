@@ -18,6 +18,8 @@ for f in sorted(glob.glob("*.html")):
     n = re.search(r'<meta name="stepsnap-steps" content="(\d+)"', head)
     # Optional cover thumbnail (a small embedded data: URL) for the tile grid.
     thumb = re.search(r'<meta name="stepsnap-thumb" content="(data:[^"]*)"', head)
+    # Optional author ("Made by") for multi-contributor setups.
+    author = re.search(r'<meta name="stepsnap-author" content="(.*?)"', head)
     date = subprocess.run(
         ["git", "log", "-1", "--format=%cI", "--", f],
         capture_output=True, text=True
@@ -40,6 +42,7 @@ for f in sorted(glob.glob("*.html")):
         "steps": int(n.group(1)) if n else None,
         "updated": date or None,
         "thumb": thumb.group(1) if thumb else None,
+        "author": html.unescape(author.group(1)) if author else None,
         "text": body[:6000],
     })
 
