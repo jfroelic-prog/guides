@@ -49,6 +49,20 @@
   .card:hover .copylink, .copylink:focus{ opacity:1; }
   .copylink:hover{ background:var(--teal); }
   @media (hover: none){ .copylink{ opacity:1; } }
+  /* "Most popular" row */
+  #popular{ margin-bottom:30px; }
+  #popular h3{ font-size:12.5px; letter-spacing:.07em; text-transform:uppercase;
+    color:var(--muted); margin:0 0 12px; }
+  .poprow{ display:flex; gap:14px; overflow-x:auto; padding-bottom:6px; }
+  a.popcard{ flex:0 0 auto; width:210px; text-decoration:none; color:inherit;
+    background:var(--card); border:1px solid var(--line); border-radius:12px; padding:13px 15px;
+    box-shadow:0 8px 24px -18px rgba(60,45,20,.35); transition:.12s; display:flex; flex-direction:column; gap:5px; }
+  a.popcard:hover{ transform:translateY(-2px); border-color:var(--teal); }
+  a.popcard .rank{ font-size:12px; color:var(--accent); font-weight:700; }
+  a.popcard b{ font-size:14px; line-height:1.25; }
+  a.popcard .v{ font-size:12px; color:var(--muted); margin-top:auto; }
+  /* per-tile view count */
+  a.guide .views{ color:var(--teal); font-weight:600; }
   .none{ grid-column:1/-1; color:var(--muted); text-align:center; padding:40px 0; }
 </style>
 </head>
@@ -57,20 +71,74 @@
   <h1>How-to <span>Guides</span></h1>
   <p class="sub">Step-by-step instructions with screenshots. Pick a guide or search below.</p>
   <input id="q" type="search" placeholder="Search guides…" autofocus>
+  <div id="popular"></div>
   <div id="list"><p class="none">Loading…</p></div>
 </main>
 <script>
+// Optional view-counter endpoint (your Google Apps Script web-app URL).
+// Leave "" to disable counts + the popular row. See analytics/README.md.
+const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
+
 let guides = [];
 const list = document.getElementById("list");
+const popular = document.getElementById("popular");
 const q = document.getElementById("q");
 
 fetch("guides.json?v=" + Date.now())
   .then(r => r.json())
-  .then(g => { guides = g; show(guides); })
+  .then(g => {
+    guides = g;
+    show(guides);
+    // Counts load separately so the grid never waits on them.
+    loadCounts().then(counts => {
+      if (!counts || !Object.keys(counts).length) return;
+      guides.forEach(x => x.views = counts[x.file] || 0);
+      if (!q.value.trim()) show(guides);
+    });
+  })
   .catch(() => list.innerHTML =
     '<p class="none">No guide index yet — it appears automatically about a minute after the first guide is uploaded.</p>');
 
+// Read counts via JSONP (a <script> tag isn't subject to CORS, which Apps Script
+// responses don't set). Resolves to {} on any error or after a short timeout.
+function loadCounts() {
+  return new Promise((resolve) => {
+    if (!COUNTER_URL || COUNTER_URL.indexOf("http") !== 0) return resolve({});
+    const cbName = "__ssCounts" + Math.floor(Date.now());
+    const s = document.createElement("script");
+    const t = setTimeout(() => { cleanup(); resolve({}); }, 4500);
+    function cleanup() { delete window[cbName]; s.remove(); clearTimeout(t); }
+    window[cbName] = (data) => { cleanup(); resolve((data && data.counts) || {}); };
+    s.onerror = () => { cleanup(); resolve({}); };
+    s.src = COUNTER_URL + (COUNTER_URL.indexOf("?") < 0 ? "?" : "&") +
+            "action=counts&callback=" + cbName;
+    document.body.appendChild(s);
+  });
+}
+
+// The "🔥 Most popular" row: top guides by views (only when not searching).
+function renderPopular(term) {
+  popular.innerHTML = "";
+  if (term) return;
+  const top = guides.filter(g => (g.views || 0) > 0)
+                    .sort((a, b) => b.views - a.views).slice(0, 5);
+  if (top.length < 2) return; // not worth a row until a couple have views
+  const h = document.createElement("h3"); h.textContent = "🔥 Most popular";
+  const row = document.createElement("div"); row.className = "poprow";
+  top.forEach((g, i) => {
+    const a = document.createElement("a");
+    a.className = "popcard"; a.href = g.file;
+    const r = document.createElement("div"); r.className = "rank"; r.textContent = "#" + (i + 1);
+    const b = document.createElement("b"); b.textContent = g.title;
+    const v = document.createElement("div"); v.className = "v";
+    v.textContent = "👁 " + g.views + (g.views === 1 ? " view" : " views");
+    a.append(r, b, v); row.append(a);
+  });
+  popular.append(h, row);
+}
+
 function show(items, term) {
+  renderPopular(term);
   if (!items.length) { list.innerHTML = '<p class="none">No guides match that search.</p>'; return; }
   list.innerHTML = "";
   for (const g of items) {
@@ -119,9 +187,15 @@ function show(items, term) {
     }
 
     const m = document.createElement("div"); m.className = "meta";
-    m.textContent = (g.author ? "by " + g.author + " · " : "") +
-                    (g.steps ? g.steps + " steps · " : "") +
-                    (g.updated ? "updated " + new Date(g.updated).toLocaleDateString() : "");
+    if (g.views) {
+      const vc = document.createElement("span"); vc.className = "views";
+      vc.textContent = "👁 " + g.views;
+      m.append(vc, document.createTextNode(" · "));
+    }
+    m.append(document.createTextNode(
+      (g.author ? "by " + g.author + " · " : "") +
+      (g.steps ? g.steps + " steps · " : "") +
+      (g.updated ? "updated " + new Date(g.updated).toLocaleDateString() : "")));
     body.append(m);
     a.append(body);
     card.append(a);
