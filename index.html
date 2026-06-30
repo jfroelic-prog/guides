@@ -50,8 +50,8 @@
   .copylink:hover{ background:var(--teal); }
   @media (hover: none){ .copylink{ opacity:1; } }
   /* "Most popular" row */
-  #popular{ margin-bottom:30px; }
-  #popular h3{ font-size:12.5px; letter-spacing:.07em; text-transform:uppercase;
+  #popular, #featured{ margin-bottom:30px; }
+  #popular h3, #featured h3{ font-size:12.5px; letter-spacing:.07em; text-transform:uppercase;
     color:var(--muted); margin:0 0 12px; }
   .poprow{ display:flex; gap:14px; overflow-x:auto; padding-bottom:6px; }
   a.popcard{ flex:0 0 auto; width:210px; text-decoration:none; color:inherit;
@@ -71,6 +71,7 @@
   <h1>How-to <span>Guides</span></h1>
   <p class="sub">Step-by-step instructions with screenshots. Pick a guide or search below.</p>
   <input id="q" type="search" placeholder="Search guides…" autofocus>
+  <div id="featured"></div>
   <div id="popular"></div>
   <div id="list"><p class="none">Loading…</p></div>
 </main>
@@ -80,24 +81,39 @@
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 
 let guides = [];
+let featuredFiles = [];
 const list = document.getElementById("list");
 const popular = document.getElementById("popular");
+const featured = document.getElementById("featured");
 const q = document.getElementById("q");
 
-fetch("guides.json?v=" + Date.now())
-  .then(r => r.json())
-  .then(g => {
-    guides = g;
-    show(guides);
-    // Counts load separately so the grid never waits on them.
-    loadCounts().then(counts => {
-      if (!counts || !Object.keys(counts).length) return;
-      guides.forEach(x => x.views = counts[x.file] || 0);
-      if (!q.value.trim()) show(guides);
-    });
-  })
-  .catch(() => list.innerHTML =
-    '<p class="none">No guide index yet — it appears automatically about a minute after the first guide is uploaded.</p>');
+// Load the guide index and the optional admin-set layout (order.json) together.
+Promise.all([
+  fetch("guides.json?v=" + Date.now()).then(r => r.json()),
+  fetch("order.json?v=" + Date.now()).then(r => r.ok ? r.json() : null).catch(() => null),
+]).then(([g, order]) => {
+  featuredFiles = (order && order.featured) || [];
+  guides = applyOrder(g, order && order.order);
+  show(guides);
+  loadCounts().then(counts => {
+    if (!counts || !Object.keys(counts).length) return;
+    guides.forEach(x => x.views = counts[x.file] || 0);
+    if (!q.value.trim()) show(guides);
+  });
+}).catch(() => list.innerHTML =
+  '<p class="none">No guide index yet — it appears automatically about a minute after the first guide is uploaded.</p>');
+
+// Apply the admin's custom order (order.json); guides not listed keep their
+// default (newest-first) position after the ordered ones.
+function applyOrder(items, order) {
+  if (!order || !order.length) return items;
+  const rank = {}; order.forEach((f, i) => (rank[f] = i));
+  return items.slice().sort((a, b) => {
+    const ia = a.file in rank ? rank[a.file] : Infinity;
+    const ib = b.file in rank ? rank[b.file] : Infinity;
+    return ia - ib;
+  });
+}
 
 // Read counts via JSONP (a <script> tag isn't subject to CORS, which Apps Script
 // responses don't set). Resolves to {} on any error or after a short timeout.
@@ -114,6 +130,26 @@ function loadCounts() {
             "action=counts&callback=" + cbName;
     document.body.appendChild(s);
   });
+}
+
+// The "⭐ Featured" row: guides the admin pinned in order.json (only when not searching).
+function renderFeatured(term) {
+  featured.innerHTML = "";
+  if (term || !featuredFiles.length) return;
+  const byFile = {}; guides.forEach(g => (byFile[g.file] = g));
+  const picks = featuredFiles.map(f => byFile[f]).filter(Boolean);
+  if (!picks.length) return;
+  const h = document.createElement("h3"); h.textContent = "⭐ Featured";
+  const row = document.createElement("div"); row.className = "poprow";
+  picks.forEach(g => {
+    const a = document.createElement("a");
+    a.className = "popcard"; a.href = g.file;
+    const b = document.createElement("b"); b.textContent = g.title;
+    const v = document.createElement("div"); v.className = "v";
+    v.textContent = g.desc ? g.desc : (g.views ? "👁 " + g.views : "");
+    a.append(b, v); row.append(a);
+  });
+  featured.append(h, row);
 }
 
 // The "🔥 Most popular" row: top guides by views (only when not searching).
@@ -138,6 +174,7 @@ function renderPopular(term) {
 }
 
 function show(items, term) {
+  renderFeatured(term);
   renderPopular(term);
   if (!items.length) { list.innerHTML = '<p class="none">No guides match that search.</p>'; return; }
   list.innerHTML = "";
