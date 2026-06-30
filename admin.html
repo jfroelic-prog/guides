@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>StepSnap — Site Admin</title>
+<style>
+  :root{ --paper:#f7f2e9; --card:#fffdf8; --ink:#211d17; --muted:#7c7466;
+    --line:#e6decd; --accent:#d23f31; --teal:#0e6b58; --gold:#c79a3b;
+    --font:"Century Gothic",CenturyGothic,"URW Gothic","Avant Garde",Futura,"Trebuchet MS",sans-serif; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--paper); color:var(--ink); font:15px/1.5 var(--font);
+    background-image:radial-gradient(rgba(120,100,60,.05) 1px, transparent 1px); background-size:22px 22px; }
+  a{ color:var(--teal); }
+  main{ max-width:920px; margin:0 auto; padding:34px 22px 90px; }
+  h1{ font-size:26px; margin:0; } h1 span{ color:var(--accent); }
+  h2{ font-size:15px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); margin:30px 0 12px; }
+  .btn{ border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:8px;
+    padding:8px 13px; font:600 13px var(--font); cursor:pointer; transition:.12s; }
+  .btn:hover{ border-color:var(--gold); }
+  .btn.primary{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  .btn.danger{ color:var(--accent); border-color:#e7c7c2; }
+  .btn.danger:hover{ background:var(--accent); color:#fff; border-color:var(--accent); }
+  .btn.tiny{ padding:4px 8px; font-size:11.5px; }
+  input{ font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:8px;
+    background:var(--card); outline:none; width:100%; }
+  input:focus{ border-color:var(--teal); }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px;
+    box-shadow:0 8px 24px -18px rgba(60,45,20,.35); }
+
+  /* login / setup */
+  #gate{ max-width:420px; margin:9vh auto 0; }
+  #gate h1{ margin-bottom:4px; } #gate p{ color:var(--muted); margin:2px 0 18px; font-size:13.5px; }
+  #gate label{ display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
+  #gate .btn{ margin-top:16px; } .err{ color:var(--accent); font-size:13px; margin-top:10px; min-height:18px; }
+
+  /* topbar */
+  .top{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+  .top .sp{ flex:1; }
+  .sub{ color:var(--muted); margin:0 0 8px; font-size:13px; }
+
+  /* metrics */
+  .metrics{ display:flex; gap:14px; flex-wrap:wrap; margin-bottom:6px; }
+  .stat{ flex:1; min-width:150px; text-align:center; }
+  .stat .n{ font-size:30px; font-weight:700; } .stat .l{ font-size:12px; color:var(--muted); }
+  .bars{ margin-top:6px; } .bar{ display:flex; align-items:center; gap:10px; margin:6px 0; font-size:13px; }
+  .bar .t{ flex:none; width:46%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .bar .track{ flex:1; height:12px; background:#efe7d6; border-radius:6px; overflow:hidden; }
+  .bar .fill{ height:100%; background:linear-gradient(90deg,var(--teal),#1c8a72); }
+  .bar .v{ flex:none; width:54px; text-align:right; color:var(--muted); }
+
+  /* guide rows */
+  .row{ display:flex; align-items:center; gap:12px; padding:11px 4px; border-bottom:1px dashed var(--line); }
+  .row .ord{ display:flex; flex-direction:column; gap:1px; }
+  .row .ord button{ border:0; background:transparent; cursor:pointer; font-size:12px; color:var(--muted); line-height:1; padding:1px 3px; }
+  .row .star{ border:0; background:transparent; cursor:pointer; font-size:16px; line-height:1; }
+  .row .info{ flex:1; min-width:0; }
+  .row .info b{ display:block; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row .info span{ font-size:11.5px; color:var(--muted); }
+  .row .info i{ font-style:normal; color:var(--gold); }
+  .row .acts{ display:flex; flex-wrap:wrap; gap:4px; justify-content:flex-end; max-width:300px; }
+  .pill{ display:inline-block; background:#f1ece0; border-radius:999px; padding:1px 8px; font-size:11px; }
+  .hidden{ display:none !important; }
+  .note{ font-size:12.5px; color:var(--muted); }
+  .health-issue{ color:var(--accent); } .health-ok{ color:var(--teal); }
+  .saved{ font-size:12px; color:var(--muted); margin-left:8px; }
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN / SETUP ============ -->
+<div id="gate" class="card">
+  <h1>Step<span>Snap</span> Admin</h1>
+  <!-- first-time setup (no key stored on this device yet) -->
+  <div id="setup" class="hidden">
+    <p>First time on this computer — connect it once. Your key is encrypted with your
+       password and stored only in this browser.</p>
+    <label>Team key (GitHub token)</label>
+    <input id="suToken" type="password" placeholder="github_pat_… or ghp_…">
+    <label>Repository (owner/name)</label>
+    <input id="suRepo" value="jfroelic-prog/guides">
+    <label>Choose a password (you’ll use this to log in here)</label>
+    <input id="suPass" type="password" placeholder="a strong password">
+    <label>Confirm password</label>
+    <input id="suPass2" type="password" placeholder="repeat it">
+    <button class="btn primary" id="suGo">Connect this device</button>
+    <div class="err" id="suErr"></div>
+  </div>
+  <!-- normal login (key already stored, locked by password) -->
+  <div id="login" class="hidden">
+    <p>Enter your password to unlock the admin tools.</p>
+    <label>Password</label>
+    <input id="liPass" type="password" placeholder="your password" autofocus>
+    <button class="btn primary" id="liGo">Log in</button>
+    <div class="err" id="liErr"></div>
+    <p class="note" style="margin-top:14px">
+      Forgot it, or new key? <a href="#" id="forget">Reset this device</a>
+      (re-enter the team key).</p>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<main id="app" class="hidden">
+  <div class="top">
+    <h1>Step<span>Snap</span> Site Admin</h1>
+    <span class="sp"></span>
+    <span class="saved" id="status"></span>
+    <button class="btn tiny" id="refresh">↻ Refresh</button>
+    <button class="btn tiny" id="lock">🔒 Lock</button>
+  </div>
+  <p class="sub" id="siteLine"></p>
+
+  <h2>📊 Metrics</h2>
+  <div class="card">
+    <div class="metrics">
+      <div class="stat"><div class="n" id="mGuides">—</div><div class="l">guides live</div></div>
+      <div class="stat"><div class="n" id="mViews">—</div><div class="l">total views</div></div>
+      <div class="stat"><div class="n" id="mUnlisted">—</div><div class="l">unlisted</div></div>
+    </div>
+    <div class="bars" id="popBars"></div>
+  </div>
+
+  <h2>🗂 Guides <span class="note">— drag order with ↑/↓, ⭐ to feature, then <button class="btn tiny" id="saveLayout">Save layout</button></span></h2>
+  <div class="card" id="guideList"></div>
+
+  <h2>🩺 Health check <button class="btn tiny" id="runHealth">Run check</button></h2>
+  <div class="card"><div id="healthOut" class="note">Checks each live guide for editable data, screenshots, and the view-counter ping.</div></div>
+</main>
+
+<script>
+/* ===== config ===== */
+const API_BASE = "https://api.github.com";
+const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
+const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
+
+let TOKEN = "";      // decrypted in memory after login
+let REPO = "jfroelic-prog/guides";
+let GUIDES = [];     // current live guides
+let ORDER = { order: [], featured: [] };
+let orderSha = null; // sha of order.json (for updates)
+
+/* ===== tiny helpers ===== */
+const $ = (id) => document.getElementById(id);
+const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const enc = new TextEncoder(), dec = new TextDecoder();
+function status(t){ $("status").textContent = t || ""; if(t) setTimeout(()=>{ if($("status").textContent===t) $("status").textContent=""; }, 4000); }
+function splitRepo(r){ const i=r.indexOf("/"); return [r.slice(0,i), r.slice(i+1)]; }
+function siteUrl(file){ const [o,r]=splitRepo(REPO); return `https://${o}.github.io/${r}/${encodeURIComponent(file)}`; }
+
+/* ===== password crypto (AES-GCM key derived from password via PBKDF2) ===== */
+async function deriveKey(password, salt){
+  const base = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey(
+    { name:"PBKDF2", salt, iterations:200000, hash:"SHA-256" },
+    base, { name:"AES-GCM", length:256 }, false, ["encrypt","decrypt"]);
+}
+async function encryptToken(token, password){
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKey(password, salt);
+  const ct = await crypto.subtle.encrypt({ name:"AES-GCM", iv }, key, enc.encode(token));
+  return { salt:b64(salt), iv:b64(iv), ct:b64(ct) };
+}
+async function decryptToken(encObj, password){
+  const key = await deriveKey(password, unb64(encObj.salt));
+  const pt = await crypto.subtle.decrypt({ name:"AES-GCM", iv:unb64(encObj.iv) }, key, unb64(encObj.ct));
+  return dec.decode(pt);
+}
+
+/* ===== GitHub API ===== */
+function gh(path, opts){
+  const [o,r]=splitRepo(REPO);
+  return fetch(`${API_BASE}/repos/${o}/${r}${path}`, {
+    ...opts, headers:{ Authorization:"Bearer "+TOKEN, Accept:"application/vnd.github+json",
+      ...(opts&&opts.body?{"Content-Type":"application/json"}:{}) , ...(opts&&opts.headers||{}) } });
+}
+async function ghGet(name){
+  const res = await gh(`/contents/${encodeURIComponent(name)}?ref=HEAD`);
+  if(res.status===404) return null;
+  if(!res.ok) throw new Error("GitHub "+res.status);
+  const j = await res.json();
+  let text=""; try{ text = dec.decode(unb64((j.content||"").replace(/\s/g,""))); }catch(e){}
+  return { sha:j.sha, text };
+}
+async function ghPut(name, content, sha, message){
+  const body = { message: message||("Update "+name), content: b64(enc.encode(content)) };
+  if(sha) body.sha = sha;
+  const res = await gh(`/contents/${encodeURIComponent(name)}`, { method:"PUT", body:JSON.stringify(body) });
+  if(!res.ok) throw new Error("GitHub "+res.status+": "+(await res.text()).slice(0,120));
+  return res.json();
+}
+async function ghDelete(name, sha, message){
+  const res = await gh(`/contents/${encodeURIComponent(name)}`, { method:"DELETE",
+    body: JSON.stringify({ message: message||("Remove "+name), sha }) });
+  if(!res.ok) throw new Error("GitHub "+res.status+": "+(await res.text()).slice(0,120));
+  return res.json();
+}
+
+/* ===== load everything ===== */
+async function loadAll(){
+  status("Loading…");
+  const [o,r]=splitRepo(REPO);
+  $("siteLine").innerHTML = `Managing <a href="https://${o}.github.io/${r}/" target="_blank">${o}.github.io/${r}</a>`;
+  // repo files
+  const res = await gh(`/contents`);
+  if(res.status===401||res.status===403) throw new Error("auth");
+  if(!res.ok) throw new Error("GitHub "+res.status);
+  const items = await res.json();
+  const files = items.filter(it=>it.type==="file" && /\.html$/i.test(it.name) && !["index.html","admin.html"].includes(it.name.toLowerCase()));
+  // titles/authors from guides.json
+  const metaByFile = {};
+  try{ const gj=await fetch(`https://${o}.github.io/${r}/guides.json?cb=`+Date.now()); if(gj.ok) (await gj.json()).forEach(g=>metaByFile[g.file]=g); }catch(e){}
+  // view counts
+  let counts={}; try{ const c=await fetch(COUNTER_URL+"?action=counts&cb="+Date.now()); if(c.ok) counts=((await c.json()).counts)||{}; }catch(e){}
+  // order.json
+  ORDER = { order:[], featured:[] }; orderSha=null;
+  try{ const od=await ghGet("order.json"); if(od){ orderSha=od.sha; const j=JSON.parse(od.text); ORDER.order=j.order||[]; ORDER.featured=j.featured||[]; } }catch(e){}
+
+  GUIDES = files.map(f=>{ const g=metaByFile[f.name];
+    return { file:f.name, sha:f.sha, title:(g&&g.title)||f.name, author:(g&&g.author)||"",
+      listed:!!g, views:counts[f.name]||0, featured:ORDER.featured.includes(f.name) }; });
+  // apply saved order (unknown files go to the end, by views)
+  GUIDES.sort((a,b)=>{
+    const ia=ORDER.order.indexOf(a.file), ib=ORDER.order.indexOf(b.file);
+    if(ia>=0&&ib>=0) return ia-ib; if(ia>=0) return -1; if(ib>=0) return 1;
+    return b.views-a.views;
+  });
+  renderMetrics(); renderGuides();
+  status("");
+}
+
+function renderMetrics(){
+  const total = GUIDES.reduce((s,g)=>s+g.views,0);
+  $("mGuides").textContent = GUIDES.length;
+  $("mViews").textContent = total;
+  $("mUnlisted").textContent = GUIDES.filter(g=>!g.listed).length;
+  const top = [...GUIDES].filter(g=>g.views>0).sort((a,b)=>b.views-a.views).slice(0,6);
+  const max = top.length?top[0].views:1;
+  $("popBars").innerHTML = top.length ? "" : '<span class="note">No views recorded yet.</span>';
+  top.forEach(g=>{
+    const row=document.createElement("div"); row.className="bar";
+    const t=document.createElement("div"); t.className="t"; t.textContent=g.title;
+    const track=document.createElement("div"); track.className="track";
+    const fill=document.createElement("div"); fill.className="fill"; fill.style.width=Math.round(g.views/max*100)+"%";
+    track.append(fill);
+    const v=document.createElement("div"); v.className="v"; v.textContent="👁 "+g.views;
+    row.append(t,track,v); $("popBars").append(row);
+  });
+}
+
+function renderGuides(){
+  const list = $("guideList"); list.innerHTML="";
+  if(!GUIDES.length){ list.innerHTML='<span class="note">No guides published yet.</span>'; return; }
+  GUIDES.forEach((g,idx)=>{
+    const row=document.createElement("div"); row.className="row";
+    const ord=document.createElement("div"); ord.className="ord";
+    ord.append(mk("button","↑",()=>moveGuide(idx,-1)), mk("button","↓",()=>moveGuide(idx,1)));
+    const star=mk("button", g.featured?"⭐":"☆", ()=>{ g.featured=!g.featured; renderGuides(); });
+    star.className="star"; star.title="Feature on the homepage";
+    const info=document.createElement("div"); info.className="info";
+    const b=document.createElement("b"); b.textContent=g.title;
+    const s=document.createElement("span");
+    s.innerHTML=(g.views?`👁 ${g.views} · `:"")+(g.author?`by ${escapeHtml(g.author)} · `:"")+escapeHtml(g.file)+(g.listed?"":' · <i>🙈 unlisted</i>');
+    info.append(b,s);
+    const acts=document.createElement("div"); acts.className="acts";
+    acts.append(
+      mkBtn("↗ Open", ()=>window.open(siteUrl(g.file),"_blank")),
+      mkBtn(g.listed?"🙈 Unlist":"👁 List", ()=>act(()=>toggleUnlisted(g))),
+      mkBtn("✎ Rename", ()=>act(()=>renameGuide(g))),
+      mkBtn("🔗 Copy", (btn)=>copyBtn(btn, siteUrl(g.file))),
+      mkBtn("🗑 Remove", ()=>act(()=>removeGuide(g)), true)
+    );
+    row.append(ord, star, info, acts); list.append(row);
+  });
+}
+function mk(tag,txt,fn){ const e=document.createElement(tag); e.textContent=txt; if(fn) e.onclick=()=>fn(); return e; }
+function mkBtn(txt,fn,danger){ const b=document.createElement("button"); b.className="btn tiny"+(danger?" danger":""); b.textContent=txt; b.onclick=()=>fn(b); return b; }
+
+function moveGuide(i,dir){ const j=i+dir; if(j<0||j>=GUIDES.length) return; [GUIDES[i],GUIDES[j]]=[GUIDES[j],GUIDES[i]]; renderGuides(); }
+
+async function act(fn){ try{ const r=await fn(); if(r!==false){ await loadAll(); } }catch(e){ console.error(e); alert("That didn't work.\n\n"+e.message); status(""); } }
+
+async function removeGuide(g){
+  if(!confirm(`Remove "${g.title}" from the live site?\n\nThe website copy is deleted (your library copy, if any, stays).`)) return false;
+  status("Removing…"); await ghDelete(g.file, g.sha, "Unpublish "+g.file);
+}
+async function renameGuide(g){
+  const base=g.file.replace(/\.html$/i,"");
+  const input=prompt(`Rename "${g.title}".\nNew filename (letters, numbers, hyphens):`, base);
+  if(!input) return false;
+  const slug=(input.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,""))||"guide";
+  const newName=slug+".html"; if(newName===g.file) return false;
+  status("Renaming…");
+  const exist=await ghGet(newName); if(exist && !confirm(`"${newName}" already exists. Replace it?`)) return false;
+  const old=await ghGet(g.file); if(!old){ alert("Original not found."); return false; }
+  const html=old.text.replace(/("file":")[^"]*(")/, `$1${newName}$2`);
+  await ghPut(newName, html, exist?exist.sha:null, `Rename ${g.file} → ${newName}`);
+  await ghDelete(g.file, old.sha, `Rename: remove ${g.file}`);
+}
+async function toggleUnlisted(g){
+  status("Updating…");
+  const f=await ghGet(g.file); if(!f){ alert("Not found."); return false; }
+  let html=f.text; const isUnlisted=/<meta name="stepsnap-unlisted" content="1">/.test(html);
+  html = isUnlisted
+    ? html.replace(/\s*<meta name="stepsnap-unlisted" content="1">/,"")
+    : html.replace(/(<meta name="generator" content="StepSnap">)/, '<meta name="stepsnap-unlisted" content="1">\n$1');
+  html = html.replace(/("unlisted":)(?:true|false)/, "$1"+(isUnlisted?"false":"true"));
+  await ghPut(g.file, html, f.sha, (isUnlisted?"List ":"Unlist ")+g.file);
+}
+
+/* save the homepage order + featured set into order.json */
+$("saveLayout").onclick = ()=>act(async()=>{
+  status("Saving layout…");
+  const payload={ order:GUIDES.map(g=>g.file), featured:GUIDES.filter(g=>g.featured).map(g=>g.file) };
+  await ghPut("order.json", JSON.stringify(payload,null,1), orderSha, "Update homepage order/featured");
+  status("Layout saved ✓");
+});
+
+/* health check: fetch each live guide and flag problems */
+$("runHealth").onclick = async ()=>{
+  const out=$("healthOut"); out.innerHTML="Checking…";
+  const lines=[];
+  for(const g of GUIDES){
+    try{
+      const r=await fetch(siteUrl(g.file)+"?cb="+Date.now()); const html=await r.text();
+      const issues=[];
+      if(html.indexOf('id="stepsnap-data"')<0) issues.push("not re-editable (old export)");
+      if(html.indexOf('<img')<0) issues.push("no images");
+      if(html.indexOf('action=hit')<0) issues.push("no view-counter ping");
+      lines.push(`<div class="${issues.length?'health-issue':'health-ok'}">${issues.length?'⚠':'✓'} ${escapeHtml(g.title)}${issues.length?' — '+issues.join(', '):''}</div>`);
+    }catch(e){ lines.push(`<div class="health-issue">⚠ ${escapeHtml(g.title)} — couldn't load</div>`); }
+  }
+  out.innerHTML = lines.join("") || '<span class="note">No guides to check.</span>';
+};
+
+async function copyBtn(btn, text){
+  const label=btn.textContent; let ok=false;
+  try{ await navigator.clipboard.writeText(text); ok=true; }catch(e){
+    try{ const ta=document.createElement("textarea"); ta.value=text; document.body.append(ta); ta.select(); ok=document.execCommand("copy"); ta.remove(); }catch(e2){}
+  }
+  btn.textContent=ok?"✓":"copy?"; setTimeout(()=>btn.textContent=label,1200);
+}
+function escapeHtml(t){ return (t||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+/* ===== gate (setup / login) ===== */
+function showGate(){
+  const saved = JSON.parse(localStorage.getItem(LS_KEY) || "null");
+  $("app").classList.add("hidden"); $("gate").classList.remove("hidden");
+  if(saved && saved.enc){ REPO=saved.repo||REPO; $("login").classList.remove("hidden"); $("setup").classList.add("hidden"); $("liPass").focus(); }
+  else{ $("setup").classList.remove("hidden"); $("login").classList.add("hidden"); }
+}
+function enterApp(){ $("gate").classList.add("hidden"); $("app").classList.remove("hidden");
+  loadAll().catch(e=>{ if(e.message==="auth"){ alert("Your saved key was rejected by GitHub. Reset this device and re-enter the team key."); } else { alert("Couldn't load: "+e.message); } }); }
+
+$("suGo").onclick = async ()=>{
+  const token=$("suToken").value.trim(), repo=$("suRepo").value.trim()||"jfroelic-prog/guides";
+  const p=$("suPass").value, p2=$("suPass2").value;
+  if(!token){ $("suErr").textContent="Paste your team key."; return; }
+  if(p.length<6){ $("suErr").textContent="Use a password of at least 6 characters."; return; }
+  if(p!==p2){ $("suErr").textContent="Passwords don't match."; return; }
+  $("suErr").textContent="";
+  const encObj=await encryptToken(token, p);
+  localStorage.setItem(LS_KEY, JSON.stringify({ repo, enc:encObj }));
+  TOKEN=token; REPO=repo; enterApp();
+};
+$("liGo").onclick = async ()=>{
+  const saved=JSON.parse(localStorage.getItem(LS_KEY)||"null"); if(!saved){ showGate(); return; }
+  try{ TOKEN=await decryptToken(saved.enc, $("liPass").value); REPO=saved.repo||REPO; $("liErr").textContent=""; enterApp(); }
+  catch(e){ $("liErr").textContent="Wrong password — try again."; }
+};
+$("liPass").addEventListener("keydown",e=>{ if(e.key==="Enter") $("liGo").click(); });
+$("forget").onclick = (e)=>{ e.preventDefault(); if(confirm("Reset this device? You'll re-enter the team key and set a new password.")){ localStorage.removeItem(LS_KEY); TOKEN=""; showGate(); } };
+$("lock").onclick = ()=>{ TOKEN=""; showGate(); };
+$("refresh").onclick = ()=>loadAll().catch(e=>alert(e.message));
+
+showGate();
+</script>
+</body>
+</html>
