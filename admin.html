@@ -284,7 +284,11 @@ async function act(fn){ try{ const r=await fn(); if(r!==false){ await loadAll();
 
 async function removeGuide(g){
   if(!confirm(`Remove "${g.title}" from the live site?\n\nThe website copy is deleted (your library copy, if any, stays).`)) return false;
-  status("Removing…"); await ghDelete(g.file, g.sha, "Unpublish "+g.file);
+  status("Removing…");
+  // Re-fetch the current id right before deleting, so a stale list can't 404.
+  const fresh = await ghGet(g.file);
+  if(!fresh){ alert(`"${g.title}" is already gone from the site. Refreshing the list.`); return; }
+  await ghDelete(g.file, fresh.sha, "Unpublish "+g.file);
 }
 async function renameGuide(g){
   const base=g.file.replace(/\.html$/i,"");
