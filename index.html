@@ -64,17 +64,67 @@
   /* per-tile view count */
   a.guide .views{ color:var(--teal); font-weight:600; }
   .none{ grid-column:1/-1; color:var(--muted); text-align:center; padding:40px 0; }
+  /* header + settings gear */
+  .hdr{ display:flex; align-items:flex-start; gap:12px; }
+  .hdr .grow{ flex:1; min-width:0; }
+  #gear{ flex:none; width:42px; height:42px; border:1px solid var(--line); background:var(--card);
+    color:var(--ink); border-radius:11px; font-size:19px; cursor:pointer; transition:.12s; }
+  #gear:hover{ border-color:var(--teal); transform:rotate(30deg); }
+  .menu{ position:fixed; right:18px; top:70px; z-index:60; width:258px; background:var(--card);
+    border:1px solid var(--line); border-radius:13px; padding:12px 15px;
+    box-shadow:0 18px 44px -18px rgba(60,45,20,.55); }
+  .menu.hidden{ display:none; }
+  .menu h4{ margin:6px 0 6px; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  .menu label{ display:flex; align-items:center; gap:9px; font-size:13.5px; padding:6px 0; cursor:pointer; }
+  .menu label input{ width:16px; height:16px; accent-color:var(--teal); }
+  .menu select{ width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px;
+    background:var(--paper); color:var(--ink); font:inherit; }
+  .menu hr{ border:0; border-top:1px solid var(--line); margin:11px 0; }
+  .menu .admin{ display:block; text-align:center; padding:10px; border-radius:9px; background:var(--ink);
+    color:var(--paper); text-decoration:none; font-weight:700; font-size:13.5px; }
+  .menu .admin:hover{ background:var(--teal); }
+  .menu .reset{ display:block; text-align:center; margin-top:9px; font-size:12px; color:var(--muted); }
+  /* bigger text: scale the guide content (not the header/gear) */
+  body.bigtext #q{ font-size:18px; }
+  body.bigtext #featured, body.bigtext #popular, body.bigtext #list{ zoom:1.13; }
+  /* dark mode */
+  body.dark{ --paper:#1b1813; --card:#26221b; --ink:#efe7d7; --muted:#a89e89; --line:#3b352b;
+    background-image:radial-gradient(rgba(255,240,200,.05) 1px, transparent 1px); }
+  body.dark a.guide .ph{ background:linear-gradient(135deg,#13534676,#0d3a3176); }
+  body.dark a.guide .snip mark{ background:#5a4a1f; color:#f3e9cf; }
 </style>
 </head>
 <body>
 <main>
-  <h1>How-to <span>Guides</span></h1>
-  <p class="sub">Step-by-step instructions with screenshots. Pick a guide or search below.</p>
+  <div class="hdr">
+    <div class="grow">
+      <h1>How-to <span>Guides</span></h1>
+      <p class="sub">Step-by-step instructions with screenshots. Pick a guide or search below.</p>
+    </div>
+    <button id="gear" title="Settings &amp; admin" aria-label="Settings and admin">⚙</button>
+  </div>
   <input id="q" type="search" placeholder="Search guides…" autofocus>
   <div id="featured"></div>
   <div id="popular"></div>
   <div id="list"><p class="none">Loading…</p></div>
 </main>
+
+<div id="settings" class="menu hidden">
+  <h4>Display</h4>
+  <label><input type="checkbox" id="setDark"> 🌙 Dark mode</label>
+  <label><input type="checkbox" id="setBig"> 🔠 Bigger text</label>
+  <label><input type="checkbox" id="setNewtab"> ↗ Open guides in a new tab</label>
+  <h4>Sort guides</h4>
+  <select id="setSort">
+    <option value="default">Featured / set order</option>
+    <option value="newest">Newest first</option>
+    <option value="views">Most viewed</option>
+    <option value="az">A–Z</option>
+  </select>
+  <hr>
+  <a class="admin" id="adminLink" href="admin.html" target="_blank" rel="noopener">🔐 Admin</a>
+  <a class="reset" href="#" id="setReset">Reset settings</a>
+</div>
 <script>
 // Optional view-counter endpoint (your Google Apps Script web-app URL).
 // Leave "" to disable counts + the popular row. See analytics/README.md.
@@ -143,7 +193,7 @@ function renderFeatured(term) {
   const row = document.createElement("div"); row.className = "poprow";
   picks.forEach(g => {
     const a = document.createElement("a");
-    a.className = "popcard"; a.href = g.file;
+    a.className = "popcard"; a.href = g.file; tgt(a);
     const b = document.createElement("b"); b.textContent = g.title;
     const v = document.createElement("div"); v.className = "v";
     v.textContent = g.desc ? g.desc : (g.views ? "👁 " + g.views : "");
@@ -163,7 +213,7 @@ function renderPopular(term) {
   const row = document.createElement("div"); row.className = "poprow";
   top.forEach((g, i) => {
     const a = document.createElement("a");
-    a.className = "popcard"; a.href = g.file;
+    a.className = "popcard"; a.href = g.file; tgt(a);
     const r = document.createElement("div"); r.className = "rank"; r.textContent = "#" + (i + 1);
     const b = document.createElement("b"); b.textContent = g.title;
     const v = document.createElement("div"); v.className = "v";
@@ -178,12 +228,13 @@ function show(items, term) {
   renderPopular(term);
   if (!items.length) { list.innerHTML = '<p class="none">No guides match that search.</p>'; return; }
   list.innerHTML = "";
-  for (const g of items) {
+  for (const g of sortForDisplay(items)) {
     const card = document.createElement("div");
     card.className = "card";
     const a = document.createElement("a");
     a.className = "guide";
     a.href = g.file;
+    tgt(a);
 
     // Cover: a thumbnail if the guide has one, otherwise a placeholder showing
     // the title's first letter.
@@ -296,12 +347,61 @@ async function copyText(text) {
   } catch (e) { return false; }
 }
 
-q.oninput = () => {
+function currentView() {
   const t = q.value.trim().toLowerCase();
   show(!t ? guides : guides.filter(g =>
     (g.title + " " + (g.desc || "") + " " + g.file + " " + (g.text || ""))
       .toLowerCase().includes(t)), t);
+}
+q.oninput = currentView;
+
+/* ===== per-visitor settings (saved in this browser) ===== */
+const PREFS = (() => {
+  const def = { theme: "light", bigtext: false, newtab: false, sort: "default" };
+  try { return Object.assign(def, JSON.parse(localStorage.getItem("ssPrefs") || "{}")); }
+  catch (e) { return def; }
+})();
+function savePrefs() { try { localStorage.setItem("ssPrefs", JSON.stringify(PREFS)); } catch (e) {} }
+function tgt(a) { if (PREFS.newtab) { a.target = "_blank"; a.rel = "noopener"; } return a; }
+function sortForDisplay(items) {
+  const a = items.slice();
+  if (PREFS.sort === "newest") a.sort((x, y) => (y.updated || "").localeCompare(x.updated || ""));
+  else if (PREFS.sort === "views") a.sort((x, y) => (y.views || 0) - (x.views || 0));
+  else if (PREFS.sort === "az") a.sort((x, y) => (x.title || "").localeCompare(y.title || ""));
+  return a; // "default" keeps the order.json / newest-first order
+}
+function applyPrefs(rerender) {
+  document.body.classList.toggle("dark", PREFS.theme === "dark");
+  document.body.classList.toggle("bigtext", !!PREFS.bigtext);
+  if (rerender && guides.length) currentView();
+}
+
+// wire the gear menu
+const gear = document.getElementById("gear");
+const menu = document.getElementById("settings");
+gear.onclick = (e) => { e.stopPropagation(); menu.classList.toggle("hidden"); };
+document.addEventListener("click", (e) => {
+  if (!menu.classList.contains("hidden") && !menu.contains(e.target) && e.target !== gear) menu.classList.add("hidden");
+});
+document.getElementById("setDark").checked = PREFS.theme === "dark";
+document.getElementById("setBig").checked = !!PREFS.bigtext;
+document.getElementById("setNewtab").checked = !!PREFS.newtab;
+document.getElementById("setSort").value = PREFS.sort;
+document.getElementById("setDark").onchange = (e) => { PREFS.theme = e.target.checked ? "dark" : "light"; savePrefs(); applyPrefs(false); };
+document.getElementById("setBig").onchange = (e) => { PREFS.bigtext = e.target.checked; savePrefs(); applyPrefs(false); };
+document.getElementById("setNewtab").onchange = (e) => { PREFS.newtab = e.target.checked; savePrefs(); applyPrefs(true); };
+document.getElementById("setSort").onchange = (e) => { PREFS.sort = e.target.value; savePrefs(); applyPrefs(true); };
+document.getElementById("setReset").onclick = (e) => {
+  e.preventDefault();
+  Object.assign(PREFS, { theme: "light", bigtext: false, newtab: false, sort: "default" });
+  savePrefs();
+  document.getElementById("setDark").checked = false;
+  document.getElementById("setBig").checked = false;
+  document.getElementById("setNewtab").checked = false;
+  document.getElementById("setSort").value = "default";
+  applyPrefs(true);
 };
+applyPrefs(false); // apply theme/text on first load (grid re-renders when data arrives)
 </script>
 </body>
 </html>
