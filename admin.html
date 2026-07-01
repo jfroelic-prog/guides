@@ -65,6 +65,46 @@
   .note{ font-size:12.5px; color:var(--muted); }
   .health-issue{ color:var(--accent); } .health-ok{ color:var(--teal); }
   .saved{ font-size:12px; color:var(--muted); margin-left:8px; }
+
+  /* ===== web editor ===== */
+  #editor{ max-width:820px; margin:0 auto; padding:28px 22px 90px; }
+  #editor .gmeta{ margin-bottom:14px; }
+  #edTitle{ font-size:22px; font-weight:700; border:0; border-bottom:2px solid var(--line);
+    border-radius:0; padding:6px 2px; background:transparent; }
+  #edTitle:focus{ border-color:var(--teal); }
+  #edDesc, #edAuthor{ margin-top:8px; }
+  #editor .unlisted{ display:flex; align-items:center; gap:7px; margin-top:10px; font-size:13px; color:var(--muted); }
+  #editor .unlisted input{ width:auto; }
+  .estep{ background:var(--card); border:1px solid var(--line); border-radius:12px; margin:14px 0;
+    box-shadow:0 8px 24px -18px rgba(60,45,20,.3); overflow:hidden; }
+  .estep.chapter{ background:#f4efe4; border-style:dashed; }
+  .estep.callout.tip{ background:#eef6f3; border-color:#bfe0d6; }
+  .estep.callout.alert{ background:#fdeceb; border-color:#f1bdb6; }
+  .estep.callout.warning{ background:#fbf4e2; border-color:#ecdca6; }
+  .estep .ehead{ display:flex; gap:11px; padding:13px 15px; align-items:flex-start; }
+  .estep .enum{ flex:none; width:28px; height:28px; border-radius:50%; background:var(--accent); color:#fff;
+    display:grid; place-items:center; font-weight:700; font-size:13px; cursor:grab; user-select:none; margin-top:2px; }
+  .estep.chapter .enum{ background:var(--gold); } .estep.callout .enum{ background:var(--teal); }
+  .estep .efields{ flex:1; min-width:0; }
+  .estep .etitle{ font-weight:700; border:0; border-bottom:1px solid transparent; border-radius:0; padding:4px 2px; }
+  .estep .etitle:hover{ border-bottom-color:var(--line); } .estep .etitle:focus{ border-bottom-color:var(--teal); }
+  .estep .edesc{ border:0; border-bottom:1px solid transparent; border-radius:0; padding:4px 2px; margin-top:2px;
+    resize:none; overflow:hidden; font:13.5px/1.5 var(--font); color:var(--muted); background:transparent; }
+  .estep .edesc:hover{ border-bottom-color:var(--line); } .estep .edesc:focus{ border-bottom-color:var(--teal); color:var(--ink); }
+  .estep .etools{ display:flex; flex-wrap:wrap; gap:4px; align-items:center; justify-content:flex-end; }
+  .estep .type-sel{ width:auto; padding:5px 6px; font-size:12px; }
+  .ibtn{ border:1px solid var(--line); background:var(--card); border-radius:7px; width:30px; height:30px;
+    cursor:pointer; font-size:13px; line-height:1; padding:0; }
+  .ibtn:hover{ border-color:var(--gold); } .ibtn.danger{ color:var(--accent); border-color:#e7c7c2; }
+  .shotwrap{ position:relative; margin:0 15px 12px; }
+  .shotwrap img{ display:block; width:100%; border-radius:8px; border:1px solid var(--line); }
+  .shotwrap .hl{ position:absolute; transform:translate(-50%,-50%); border:3px solid #f97316; border-radius:50%;
+    box-shadow:0 0 0 3px rgba(249,115,22,.25); pointer-events:none; }
+  .shotwrap.aim{ cursor:crosshair; }
+  .shot-tools{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:0 15px 14px; font-size:12.5px; color:var(--muted); }
+  .shot-tools label{ display:flex; align-items:center; gap:5px; } .shot-tools input[type=checkbox]{ width:auto; }
+  .shot-tools input[type=range]{ width:120px; padding:0; }
+  .noshot{ padding:0 15px 14px; }
 </style>
 </head>
 <body>
@@ -121,12 +161,38 @@
     <div class="bars" id="popBars"></div>
   </div>
 
+  <h2>📥 Drafts <span class="note">— pushed from the extension; open one to finish &amp; publish it</span></h2>
+  <div class="card" id="draftList"><span class="note">Loading…</span></div>
+
   <h2>🗂 Guides <span class="note">— drag order with ↑/↓, ⭐ to feature, then <button class="btn tiny" id="saveLayout">Save layout</button></span></h2>
   <div class="card" id="guideList"></div>
 
   <h2>🩺 Health check <button class="btn tiny" id="runHealth">Run check</button></h2>
   <div class="card"><div id="healthOut" class="note">Checks each live guide for editable data, screenshots, and the view-counter ping.</div></div>
 </main>
+
+<!-- ============ WEB EDITOR ============ -->
+<div id="editor" class="hidden">
+  <div class="top">
+    <h1>Edit guide</h1>
+    <span class="sp"></span>
+    <span class="saved" id="edStatus"></span>
+    <button class="btn tiny" id="edBack">← Back to admin</button>
+    <button class="btn primary tiny" id="edPublish">🚀 Publish</button>
+  </div>
+  <p class="sub" id="edWhere"></p>
+  <div class="card gmeta">
+    <input id="edTitle" placeholder="Guide title">
+    <input id="edDesc" placeholder="Short description (optional)">
+    <input id="edAuthor" placeholder="Made by (your name)">
+    <label class="unlisted"><input type="checkbox" id="edUnlisted"> 🙈 Unlisted — keep the link but hide it from the homepage</label>
+  </div>
+  <div id="edSteps"></div>
+  <div style="text-align:center; margin:18px 0">
+    <button class="btn" id="edAddStep">+ Add step</button>
+    <button class="btn" id="edAddChapter">📖 + Add chapter heading</button>
+  </div>
+</div>
 
 <script>
 /* ===== config ===== */
@@ -176,8 +242,10 @@ function gh(path, opts){
     ...opts, headers:{ Authorization:"Bearer "+TOKEN, Accept:"application/vnd.github+json",
       ...(opts&&opts.body?{"Content-Type":"application/json"}:{}) , ...(opts&&opts.headers||{}) } });
 }
+// Encode a repo path (keeps "/" so drafts/foo.html resolves into the subfolder).
+function ghPath(name){ return name.split("/").map(encodeURIComponent).join("/"); }
 async function ghGet(name){
-  const res = await gh(`/contents/${encodeURIComponent(name)}?ref=HEAD`);
+  const res = await gh(`/contents/${ghPath(name)}?ref=HEAD`);
   if(res.status===404) return null;
   if(!res.ok) throw new Error("GitHub "+res.status);
   const j = await res.json();
@@ -187,12 +255,12 @@ async function ghGet(name){
 async function ghPut(name, content, sha, message){
   const body = { message: message||("Update "+name), content: b64(enc.encode(content)) };
   if(sha) body.sha = sha;
-  const res = await gh(`/contents/${encodeURIComponent(name)}`, { method:"PUT", body:JSON.stringify(body) });
+  const res = await gh(`/contents/${ghPath(name)}`, { method:"PUT", body:JSON.stringify(body) });
   if(!res.ok) throw new Error("GitHub "+res.status+": "+(await res.text()).slice(0,120));
   return res.json();
 }
 async function ghDelete(name, sha, message){
-  const res = await gh(`/contents/${encodeURIComponent(name)}`, { method:"DELETE",
+  const res = await gh(`/contents/${ghPath(name)}`, { method:"DELETE",
     body: JSON.stringify({ message: message||("Remove "+name), sha }) });
   if(!res.ok) throw new Error("GitHub "+res.status+": "+(await res.text()).slice(0,120));
   return res.json();
@@ -227,7 +295,7 @@ async function loadAll(){
     if(ia>=0&&ib>=0) return ia-ib; if(ia>=0) return -1; if(ib>=0) return 1;
     return b.views-a.views;
   });
-  renderMetrics(); renderGuides();
+  renderMetrics(); renderGuides(); loadDrafts();
   status("");
 }
 
@@ -266,6 +334,7 @@ function renderGuides(){
     info.append(b,s);
     const acts=document.createElement("div"); acts.className="acts";
     acts.append(
+      mkBtn("✏️ Edit", ()=>edOpen(g.file, false)),
       mkBtn("↗ Open", ()=>window.open(siteUrl(g.file),"_blank")),
       mkBtn(g.listed?"🙈 Unlist":"👁 List", ()=>act(()=>toggleUnlisted(g))),
       mkBtn("✎ Rename", ()=>act(()=>renameGuide(g))),
@@ -347,6 +416,357 @@ async function copyBtn(btn, text){
   btn.textContent=ok?"✓":"copy?"; setTimeout(()=>btn.textContent=label,1200);
 }
 function escapeHtml(t){ return (t||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+/* ===================================================================
+   WEB EDITOR — the extension's editing capabilities, in the browser.
+   Loads a guide's embedded editable model (from a draft or a live page),
+   lets you edit text/structure/highlights, then rebuilds + publishes it.
+   =================================================================== */
+let ED = null; // the guide being edited: {file, draftPath, title, desc, author, unlisted, steps[]}
+
+/* --- ported helpers (kept identical to the extension so round-trips match) --- */
+const esc = escapeHtml;
+const calloutIcon = { tip:"💡", alert:"⚠️", warning:"🔔" };
+function edSlug(t){ return ((t||"guide").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,""))||"guide"; }
+function edUid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function edBlank(type,title){ return { id:edUid(), type, title, desc:"", img:null, hx:.5, hy:.5, hr:.045, showHl:false, blurs:[] }; }
+function edStatus(t){ $("edStatus").textContent=t||""; }
+function linkify(raw){
+  raw=(raw||"").replace(/<((?:https?:\/\/)[^>\s]+)>/g,"$1");
+  const re=/(https?:\/\/[^\s<>"')\]]+)/g; let out="",last=0,m;
+  while((m=re.exec(raw))){ out+=esc(raw.slice(last,m.index)); let url=m[1],trail="";
+    const t=url.match(/[.,;:!?]+$/); if(t){ trail=t[0]; url=url.slice(0,-trail.length); }
+    out+=`<a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a>`+esc(trail);
+    last=m.index+m[1].length; }
+  return out+esc(raw.slice(last));
+}
+function linkifyML(raw){ return linkify(raw).replace(/\n/g,"<br>"); }
+function flatten(s){ return new Promise(res=>{
+  if(!s.img) return res(null);
+  if(s.img.startsWith("data:image/gif")) return res(s.img);       // keep GIFs animated
+  const hasBlur=s.blurs&&s.blurs.length;
+  if(!s.showHl&&!hasBlur) return res(s.img);
+  const im=new Image();
+  im.onload=()=>{ const c=document.createElement("canvas"); c.width=im.width; c.height=im.height;
+    const x=c.getContext("2d"); x.drawImage(im,0,0);
+    if(hasBlur){ for(const b of s.blurs){ const bx=b.x*im.width,by=b.y*im.height,bw=Math.max(1,b.w*im.width),bh=Math.max(1,b.h*im.height);
+      const t=document.createElement("canvas"); const f=16; t.width=Math.max(1,Math.round(bw/f)); t.height=Math.max(1,Math.round(bh/f));
+      t.getContext("2d").drawImage(im,bx,by,bw,bh,0,0,t.width,t.height);
+      x.imageSmoothingEnabled=false; x.drawImage(t,0,0,t.width,t.height,bx,by,bw,bh); x.imageSmoothingEnabled=true; } }
+    if(s.showHl){ x.beginPath(); x.arc(s.hx*im.width,s.hy*im.height,(s.hr||0.045)*im.width,0,Math.PI*2);
+      x.lineWidth=Math.max(4,im.width*0.004); x.strokeStyle="#f97316"; x.stroke(); }
+    res(c.toDataURL("image/jpeg",0.85)); };
+  im.onerror=()=>res(s.img); im.src=s.img;
+}); }
+function makeThumb(dataUrl,maxW=480){ return new Promise(res=>{
+  if(!dataUrl) return res(""); const im=new Image();
+  im.onload=()=>{ const scale=Math.min(1,maxW/im.naturalWidth); const c=document.createElement("canvas");
+    c.width=Math.max(1,Math.round(im.naturalWidth*scale)); c.height=Math.max(1,Math.round(im.naturalHeight*scale));
+    c.getContext("2d").drawImage(im,0,0,c.width,c.height); res(c.toDataURL("image/jpeg",0.6)); };
+  im.onerror=()=>res(""); im.src=dataUrl;
+}); }
+function reencodeForEmbed(dataUrl){ return new Promise(res=>{
+  if(!dataUrl) return res(null); if(dataUrl.startsWith("data:image/gif")) return res(dataUrl);
+  const im=new Image();
+  im.onload=()=>{ const c=document.createElement("canvas"); c.width=im.naturalWidth; c.height=im.naturalHeight;
+    c.getContext("2d").drawImage(im,0,0); res(c.toDataURL("image/jpeg",0.85)); };
+  im.onerror=()=>res(dataUrl); im.src=dataUrl;
+}); }
+
+/* --- editor UI --- */
+function positionHl(hl,s){ hl.style.left=(s.hx*100)+"%"; hl.style.top=(s.hy*100)+"%"; hl.style.width=((s.hr||0.045)*200)+"%"; hl.style.aspectRatio="1"; }
+function edGrow(t){ t.style.height="auto"; t.style.height=t.scrollHeight+"px"; }
+function edMove(i,dir){ const j=i+dir; if(j<0||j>=ED.steps.length) return; [ED.steps[i],ED.steps[j]]=[ED.steps[j],ED.steps[i]]; edRender(); }
+function edIbtn(txt,title,fn,danger){ const b=document.createElement("button"); b.className="ibtn"+(danger?" danger":""); b.textContent=txt; b.title=title; b.onclick=fn; return b; }
+
+function edRender(){
+  const host=$("edSteps"); host.innerHTML="";
+  if(!ED||!ED.steps.length){ host.innerHTML='<div class="card note">No steps yet — use “+ Add step”.</div>'; return; }
+  let n=0;
+  ED.steps.forEach((s,i)=>{
+    let badge;
+    if(s.type==="chapter"){ n=0; badge="📖"; }
+    else if(calloutIcon[s.type]) badge=calloutIcon[s.type];
+    else if(s.type==="nav") badge="→";
+    else badge=String(++n);
+    host.append(edCard(s,i,badge));
+  });
+}
+function edCard(s,i,badge){
+  const el=document.createElement("div");
+  el.className="estep"+(calloutIcon[s.type]?" callout "+s.type:"")+(s.type==="chapter"?" chapter":"");
+  const head=document.createElement("div"); head.className="ehead";
+  const num=document.createElement("div"); num.className="enum"; num.textContent=badge; num.title="Drag to reorder";
+  const fields=document.createElement("div"); fields.className="efields";
+  const title=document.createElement("input"); title.className="etitle"; title.value=s.title||"";
+  title.placeholder=s.type==="chapter"?"Chapter title…":"Step title…";
+  title.oninput=()=>{ s.title=title.value; };
+  const desc=document.createElement("textarea"); desc.className="edesc"; desc.rows=1; desc.value=s.desc||"";
+  desc.placeholder="Add detail (optional)…"; desc.oninput=()=>{ s.desc=desc.value; edGrow(desc); };
+  fields.append(title,desc); setTimeout(()=>edGrow(desc));
+  const tools=document.createElement("div"); tools.className="etools";
+  if(s.type!=="nav"){
+    const sel=document.createElement("select"); sel.className="type-sel"; sel.title="Block type — a numbered step, a chapter heading, or a callout";
+    const cur=(s.type==="chapter"||calloutIcon[s.type])?s.type:"click";
+    [["click","● Step"],["chapter","📖 Chapter"],["tip","💡 Tip"],["alert","⚠️ Alert"],["warning","🔔 Warning"]]
+      .forEach(([v,l])=>{ const o=document.createElement("option"); o.value=v; o.textContent=l; if(v===cur)o.selected=true; sel.append(o); });
+    sel.onchange=()=>{ s.type=sel.value; edRender(); };
+    tools.append(sel);
+  }
+  tools.append(
+    edIbtn("↑","Move up",()=>edMove(i,-1)),
+    edIbtn("↓","Move down",()=>edMove(i,1)),
+    edIbtn("⧉","Duplicate",()=>{ ED.steps.splice(i+1,0,{...s,id:edUid()}); edRender(); }),
+    edIbtn("✕","Delete",()=>{ if(confirm("Delete this step?")){ ED.steps.splice(i,1); edRender(); } },true)
+  );
+  head.append(num,fields,tools); el.append(head);
+
+  if(s.img){
+    const wrap=document.createElement("div"); wrap.className="shotwrap aim";
+    const img=document.createElement("img"); img.src=s.img; img.draggable=false; wrap.append(img);
+    if(s.showHl){ const hl=document.createElement("div"); hl.className="hl"; positionHl(hl,s); wrap.append(hl); }
+    wrap.title="Click to move the highlight circle";
+    wrap.onclick=(e)=>{ const r=wrap.getBoundingClientRect(); s.hx=(e.clientX-r.left)/r.width; s.hy=(e.clientY-r.top)/r.height; s.showHl=true; edRender(); };
+    el.append(wrap);
+    const st=document.createElement("div"); st.className="shot-tools";
+    const tog=document.createElement("label"); const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=!!s.showHl;
+    cb.onchange=()=>{ s.showHl=cb.checked; edRender(); }; tog.append(cb, document.createTextNode(" show highlight"));
+    const sizeLbl=document.createElement("label"); const range=document.createElement("input"); range.type="range"; range.min=2; range.max=15; range.step=0.5; range.value=(s.hr||0.045)*100;
+    range.oninput=()=>{ s.hr=range.value/100; const h=wrap.querySelector(".hl"); if(h) positionHl(h,s); };
+    sizeLbl.append(document.createTextNode("size "), range);
+    const rm=document.createElement("button"); rm.className="ibtn danger"; rm.textContent="🖼✕"; rm.title="Remove screenshot"; rm.style.width="auto"; rm.style.padding="0 8px";
+    rm.onclick=()=>{ if(confirm("Remove this screenshot?")){ s.img=null; edRender(); } };
+    st.append(tog,sizeLbl,rm);
+    el.append(st);
+  } else if(s.type!=="chapter" && !calloutIcon[s.type] && s.type!=="nav"){
+    const no=document.createElement("div"); no.className="noshot note"; no.textContent="No screenshot on this step.";
+    el.append(no);
+  }
+
+  num.onmousedown=()=>{ el.draggable=true; };
+  el.ondragstart=(e)=>{ e.dataTransfer.setData("text/plain",i); el.style.opacity=".5"; };
+  el.ondragend=()=>{ el.style.opacity=""; el.draggable=false; };
+  el.ondragover=(e)=>{ e.preventDefault(); };
+  el.ondrop=(e)=>{ e.preventDefault(); const from=+e.dataTransfer.getData("text/plain"); if(isNaN(from)||from===i) return; const [m]=ED.steps.splice(from,1); ED.steps.splice(i,0,m); edRender(); };
+  return el;
+}
+
+/* --- build the exported/published HTML (identical shape to the extension) --- */
+async function edBuildExport(){
+  const steps=ED.steps;
+  const meta={ title:ED.title, desc:ED.desc, author:ED.author, unlisted:ED.unlisted, file:ED.file };
+  const imgs=await Promise.all(steps.map(flatten));
+  const thumb=await makeThumb(imgs.find(u=>u)||"");
+  const embedSteps=await Promise.all(steps.map(async s=>({ ...s, img: await reencodeForEmbed(s.img) })));
+  const fileName=meta.file || edSlug(meta.title)+".html";
+  const dataJson=JSON.stringify({ stepsnap:2, title:meta.title, desc:meta.desc, file:fileName,
+    unlisted:!!meta.unlisted, author:meta.author||"", steps:embedSteps }).replace(/</g,"\\u003c");
+  let n=0;
+  const stepCount=steps.filter(s=>s.type!=="chapter"&&s.type!=="nav"&&!calloutIcon[s.type]).length;
+  const chapters=[];
+  const body=steps.map((s,i)=>{
+    if(s.type==="chapter"){ n=0; const id="chapter-"+(chapters.length+1);
+      chapters.push({ id, title:s.title||("Chapter "+(chapters.length+1)) });
+      return `<h2 class="chapter" id="${id}">${linkify(s.title)}</h2>`+(s.desc?`<p class="chapter-lead">${linkifyML(s.desc)}</p>`:""); }
+    if(calloutIcon[s.type]){ return `<div class="callout ${s.type}"><span class="cico">${calloutIcon[s.type]}</span>
+      <div class="ctext">${s.title?`<h2>${linkify(s.title)}</h2>`:""}${s.desc?`<p>${linkifyML(s.desc)}</p>`:""}
+      ${imgs[i]?`<img src="${imgs[i]}">`:""}</div></div>`; }
+    const num=s.type==="nav"?"→":++n;
+    return `<div class="step"><div class="head"><span class="n">${num}</span>
+      <div><h2>${linkify(s.title)}</h2>${s.desc?`<p>${linkifyML(s.desc)}</p>`:""}</div></div>
+      ${imgs[i]?`<img src="${imgs[i]}">`:""}</div>`;
+  }).join("\n");
+  const toc=chapters.length>=2?`<nav id="toc" aria-label="Chapters">
+<h4>📖 Chapters</h4><button id="tocToggle" type="button" aria-expanded="false">📖 Chapters</button>
+<ol>${chapters.map(c=>`<li><a href="#${c.id}">${esc(c.title)}</a></li>`).join("")}</ol>
+</nav>`:"";
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(meta.title)||"Guide"}</title>
+<meta name="description" content="${esc(meta.desc)}">
+<meta name="stepsnap-steps" content="${stepCount}">
+${thumb?`<meta name="stepsnap-thumb" content="${thumb}">`:""}
+${meta.unlisted?`<meta name="stepsnap-unlisted" content="1">`:""}
+${meta.author?`<meta name="stepsnap-author" content="${esc(meta.author)}">`:""}
+<meta name="generator" content="StepSnap">
+<style>body{font:16px/1.6 "Century Gothic",CenturyGothic,"URW Gothic","Avant Garde",Futura,"Trebuchet MS",sans-serif;margin:0;padding:0;color:#211d17;background:#faf7f0}
+.page{max-width:1120px;margin:0 auto;padding:34px 20px 48px;display:flex;gap:34px;align-items:flex-start}
+.col{flex:1 1 auto;min-width:0;max-width:820px;margin:0 auto}
+h1{font-size:34px;margin-bottom:4px}.lead{color:#7c7466;margin-top:0}
+.byline{color:#7c7466;font-size:13px;margin:0 0 14px}
+.home{display:inline-block;margin:0 8px 18px 0;padding:7px 14px;border:1px solid #e6decd;border-radius:999px;
+background:#fff;color:#211d17;text-decoration:none;font:600 13.5px inherit;cursor:pointer;
+box-shadow:0 6px 18px -14px rgba(60,45,20,.5)}
+.home:hover{border-color:#0e6b58}
+@media print{.home{display:none}}
+.step{background:#fff;border:1px solid #e6decd;border-radius:12px;margin:22px 0;overflow:hidden;box-shadow:0 8px 24px -16px rgba(60,45,20,.3)}
+.head{display:flex;gap:14px;padding:16px 18px;align-items:flex-start}
+.n{flex:none;width:32px;height:32px;border-radius:50%;background:#d23f31;color:#fff;display:grid;place-items:center;font-weight:700}
+h2{font-size:18px;margin:3px 0 2px}.head p{margin:2px 0 0;color:#7c7466;font-size:14px}
+img{display:block;width:calc(100% - 36px);margin:0 18px 18px;border-radius:8px;border:1px solid #e6decd}
+.callout{display:flex;gap:13px;align-items:flex-start;border:1px solid;border-radius:12px;margin:22px 0;padding:15px 18px}
+.callout .cico{font-size:22px;line-height:1;flex:none;margin-top:1px}
+.callout .ctext{min-width:0;flex:1}
+.callout h2{margin:0 0 3px}.callout p{margin:0;color:#5c5346;font-size:15px}
+.callout img{width:100%;margin:12px 0 0}
+.callout.tip{background:#eef6f3;border-color:#bfe0d6}
+.callout.alert{background:#fdeceb;border-color:#f1bdb6}
+.callout.warning{background:#fbf4e2;border-color:#ecdca6}
+h2.chapter{font-size:25px;margin:42px 0 6px;padding-top:14px;border-top:2px solid #e6decd;scroll-margin-top:16px}
+.chapter-lead{color:#7c7466;margin:0 0 8px;font-size:15px}
+#toc{position:sticky;top:16px;align-self:flex-start;flex:0 0 224px;max-height:calc(100vh - 32px);overflow:auto;
+background:#fff;border:1px solid #e6decd;border-radius:12px;box-shadow:0 10px 30px -16px rgba(60,45,20,.45);font-size:13px;padding:12px 11px}
+#toc h4{margin:0 0 8px;font-size:13px;color:#211d17}
+#toc button{display:none;border:0;background:transparent;font:inherit;font-weight:700;cursor:pointer;color:#211d17;padding:2px 4px}
+#toc ol{list-style:none;margin:0;padding:0;counter-reset:ch}
+#toc li{counter-increment:ch}
+#toc a{display:block;text-decoration:none;color:#5c5346;padding:6px 8px;border-radius:7px;line-height:1.3}
+#toc a::before{content:counter(ch) ". ";color:#b6ad9b}
+#toc a:hover{background:#f3f0e8}#toc a.active{background:#eef6f3;color:#0e6b58;font-weight:700}
+@media (max-width:920px){.page{display:block}#toc{position:fixed;top:14px;left:14px;z-index:40;flex:none;max-width:260px;padding:8px 10px}#toc h4{display:none}#toc button{display:block}#toc ol{display:none;max-height:70vh;overflow:auto;margin-top:6px}#toc.open ol{display:block}}
+@media print{#toc{display:none}}
+html{scroll-behavior:smooth}
+@media print{.step,.callout,h2.chapter{break-inside:avoid}.page{display:block}.col{max-width:none}}</style></head><body>
+<div class="page">
+${toc}
+<main class="col">
+<a class="home" href="./" id="homeLink">⌂ All guides</a>
+<button class="home" id="copyLinkBtn" type="button">🔗 Copy link</button>
+<a class="home" id="openTab" target="_blank" rel="noopener">↗ Open in new tab</a>
+<h1>${esc(meta.title)||"Untitled guide"}</h1>${meta.desc?`<p class="lead">${esc(meta.desc)}</p>`:""}
+${meta.author?`<p class="byline">✍️ Made by ${esc(meta.author)}</p>`:""}
+${body}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
+</main>
+</div>
+<script type="application/json" id="stepsnap-data">${dataJson}<\/script>
+<script>
+(function(){
+  if(location.protocol==="file:"){ ["homeLink","copyLinkBtn","openTab"].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display="none";}); return; }
+  var openTab=document.getElementById("openTab"); if(openTab) openTab.href=location.href;
+  var btn=document.getElementById("copyLinkBtn");
+  if(btn) btn.onclick=function(){
+    var url=location.href, label=btn.textContent;
+    function done(ok){ if(ok){ btn.textContent="✓ Copied!"; setTimeout(function(){btn.textContent=label;},1600); } else { var inp=document.createElement("input"); inp.className="home"; inp.readOnly=true; inp.value=url; inp.style.width="260px"; inp.title="Press Ctrl/Cmd-C to copy"; btn.replaceWith(inp); inp.focus(); inp.select(); } }
+    function legacy(){ try{var ta=document.createElement("textarea");ta.value=url;ta.setAttribute("readonly","");ta.style.position="fixed";ta.style.top="-1000px";document.body.appendChild(ta);ta.select();ta.setSelectionRange(0,url.length);var ok=document.execCommand("copy");ta.remove();done(ok);}catch(e){done(false);} }
+    try{ if(navigator.clipboard&&window.isSecureContext){ navigator.clipboard.writeText(url).then(function(){done(true);},legacy); return; } }catch(e){}
+    legacy();
+  };
+})();
+<\/script>
+<script>
+(function(){
+  var COUNTER=${JSON.stringify(COUNTER_URL)};
+  if(!COUNTER||COUNTER.indexOf("http")!==0||location.protocol==="file:")return;
+  var g=(location.pathname.split("/").pop()||"").toLowerCase();
+  if(!g||g.slice(-5)!==".html")return;
+  try{ fetch(COUNTER+(COUNTER.indexOf("?")<0?"?":"&")+"action=hit&guide="+encodeURIComponent(g),{mode:"no-cors"}).catch(function(){}); }catch(e){}
+})();
+<\/script>
+<script>
+(function(){
+  var toc=document.getElementById("toc"); if(!toc) return;
+  var btn=document.getElementById("tocToggle");
+  if(btn) btn.onclick=function(){ var o=toc.classList.toggle("open"); btn.setAttribute("aria-expanded",o); };
+  var links=[].slice.call(toc.querySelectorAll("a"));
+  links.forEach(function(a){ a.addEventListener("click",function(){ if(window.innerWidth<=920) toc.classList.remove("open"); }); });
+  var heads=[].slice.call(document.querySelectorAll("h2.chapter"));
+  function spy(){ var cur=heads[0]; for(var i=0;i<heads.length;i++){ if(heads[i].getBoundingClientRect().top<=130) cur=heads[i]; }
+    links.forEach(function(a){ a.classList.toggle("active", !!cur && a.getAttribute("href")==="#"+cur.id); }); }
+  window.addEventListener("scroll",spy,{passive:true}); window.addEventListener("resize",spy); spy();
+})();
+<\/script></body></html>`;
+  return { html, fileName };
+}
+
+/* --- open / publish / navigate --- */
+function showEditor(where){
+  $("app").classList.add("hidden"); $("editor").classList.remove("hidden");
+  $("edWhere").textContent=where||"";
+  $("edTitle").value=ED.title; $("edDesc").value=ED.desc; $("edAuthor").value=ED.author; $("edUnlisted").checked=!!ED.unlisted;
+  edStatus(""); edRender(); window.scrollTo(0,0);
+}
+function showApp(){ $("editor").classList.add("hidden"); $("app").classList.remove("hidden"); ED=null; window.scrollTo(0,0); }
+
+async function edOpen(pathOrFile, isDraft){
+  status("Opening editor…");
+  try{
+    const f=await ghGet(pathOrFile);
+    if(!f){ alert("Couldn't find that file on the site."); return; }
+    const doc=new DOMParser().parseFromString(f.text,"text/html");
+    const el=doc.getElementById("stepsnap-data");
+    if(!el){ alert("This guide has no editable data embedded (it may be an older export), so it can't be edited here yet.\n\nOpen it in the extension instead."); return; }
+    const p=JSON.parse(el.textContent);
+    ED={ file:(p.file || (isDraft?null:pathOrFile)), draftPath:(isDraft?pathOrFile:null),
+      title:p.title||"", desc:p.desc||"", author:p.author||"", unlisted:!!p.unlisted,
+      steps:(p.steps||[]).map(s=>({ ...s, blurs:s.blurs||[] })) };
+    if(!ED.file) ED.file=edSlug(ED.title)+".html";
+    showEditor(isDraft ? ("Draft “"+pathOrFile.replace(/^drafts\//,"")+"” — publishing will post it live and remove the draft.")
+                       : ("Editing the live guide “"+pathOrFile+"” — publishing overwrites it."));
+  }catch(e){ console.error(e); alert("Couldn't open for editing.\n\n"+e.message); }
+  finally{ status(""); }
+}
+
+async function edPublish(){
+  if(!ED) return;
+  if(!ED.title.trim()){ alert("Give the guide a title first."); $("edTitle").focus(); return; }
+  const title=ED.title, draftPath=ED.draftPath;
+  edStatus("Building…");
+  try{
+    const { html, fileName }=await edBuildExport();
+    const existing=await ghGet(fileName);
+    // Confirm an overwrite only when publishing a DRAFT onto an existing live
+    // guide. Editing a live guide in place is a deliberate overwrite — no prompt.
+    if(existing && draftPath){
+      const mm=existing.text.match(/stepsnap-author" content="([^"]*)"/);
+      const who=mm&&mm[1]?` (made by ${mm[1]})`:"";
+      if(!confirm(`A live guide “${fileName}”${who} already exists.\n\nReplace it with this version?`)){ edStatus(""); return; }
+    }
+    edStatus("Publishing…");
+    await ghPut(fileName, html, existing?existing.sha:null, "Publish "+fileName);
+    if(draftPath){ const d=await ghGet(draftPath); if(d) await ghDelete(draftPath, d.sha, "Remove draft "+draftPath); }
+  }catch(e){ console.error(e); edStatus(""); alert("Couldn't publish.\n\n"+e.message); return; }
+  // Published OK — refreshing the list is best-effort and must not look like a failure.
+  edStatus("Published ✓"); showApp(); loadAll().catch(()=>{});
+  alert(`Published “${title}” ✓\n\nIt’s live on the site in about a minute.`);
+}
+
+/* --- drafts (the extension's “Push draft” inbox) --- */
+async function loadDrafts(){
+  const host=$("draftList");
+  try{
+    const res=await gh(`/contents/drafts`);
+    if(res.status===404){ host.innerHTML='<span class="note">No drafts yet. In the extension editor, click <b>📤 Push draft</b> to send one here.</span>'; return; }
+    if(!res.ok) throw new Error("GitHub "+res.status);
+    const items=await res.json();
+    renderDrafts(items.filter(it=>it.type==="file" && /\.html$/i.test(it.name)));
+  }catch(e){ host.innerHTML='<span class="note">Couldn’t load drafts ('+escapeHtml(e.message)+').</span>'; }
+}
+function renderDrafts(drafts){
+  const host=$("draftList"); host.innerHTML="";
+  if(!drafts.length){ host.innerHTML='<span class="note">No drafts yet. In the extension editor, click <b>📤 Push draft</b> to send one here.</span>'; return; }
+  drafts.forEach(d=>{
+    const row=document.createElement("div"); row.className="row";
+    const info=document.createElement("div"); info.className="info";
+    const b=document.createElement("b"); b.textContent=d.name.replace(/\.html$/i,"");
+    const s=document.createElement("span"); s.textContent="drafts/"+d.name;
+    info.append(b,s);
+    const acts=document.createElement("div"); acts.className="acts";
+    acts.append(
+      mkBtn("✏️ Open & edit", ()=>edOpen("drafts/"+d.name, true)),
+      mkBtn("🗑 Discard", ()=>act(async()=>{ if(!confirm(`Discard draft “${d.name}”? This can't be undone.`)) return false;
+        const f=await ghGet("drafts/"+d.name); if(f) await ghDelete("drafts/"+d.name, f.sha, "Discard draft "+d.name); }), true)
+    );
+    row.append(info,acts); host.append(row);
+  });
+}
+
+/* wire the editor's own controls (once) */
+$("edTitle").oninput=e=>{ if(ED) ED.title=e.target.value; };
+$("edDesc").oninput=e=>{ if(ED) ED.desc=e.target.value; };
+$("edAuthor").oninput=e=>{ if(ED) ED.author=e.target.value; };
+$("edUnlisted").onchange=e=>{ if(ED) ED.unlisted=e.target.checked; };
+$("edBack").onclick=()=>{ if(confirm("Leave the editor? Any changes you haven't published are discarded.")) showApp(); };
+$("edPublish").onclick=edPublish;
+$("edAddStep").onclick=()=>{ if(!ED) return; ED.steps.push(edBlank("note","New step")); edRender(); window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"}); };
+$("edAddChapter").onclick=()=>{ if(!ED) return; ED.steps.push(edBlank("chapter","New chapter")); edRender(); window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"}); };
 
 /* ===== gate (setup / login) ===== */
 function showGate(){
