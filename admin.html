@@ -258,12 +258,18 @@ async function ghGet(name){
   const j = await res.json();
   let text="";
   if(j.content){ try{ text = dec.decode(unb64(j.content.replace(/\s/g,""))); }catch(e){} }
-  // Files over ~1MB come back with EMPTY content (encoding "none"). Our guides
-  // embed screenshots so they're routinely bigger — fetch the raw bytes instead.
-  if(!text){
+  // Files over ~1MB return EMPTY inline content (encoding "none"), and our guides
+  // embed screenshots so they routinely exceed that. NOTE: the "raw" media type
+  // is unreliable cross-origin from a browser — it returns a truncated stub (~900
+  // bytes) even though it works from curl. So pull the blob by sha instead: the
+  // Git blobs API returns base64 JSON up to 100MB, with proper CORS, in-browser.
+  if(!text && j.sha){
     try{
-      const raw = await gh(`/contents/${ghPath(name)}?ref=HEAD`, { headers:{ Accept:"application/vnd.github.raw" } });
-      if(raw.ok) text = await raw.text();
+      const blob = await gh(`/git/blobs/${j.sha}`);
+      if(blob.ok){
+        const b = await blob.json();
+        if(b.content) text = dec.decode(unb64(b.content.replace(/\s/g,"")));
+      }
     }catch(e){}
   }
   return { sha:j.sha, text };
