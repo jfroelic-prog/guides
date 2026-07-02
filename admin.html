@@ -244,16 +244,32 @@ function gh(path, opts){
 }
 // Encode a repo path (keeps "/" so drafts/foo.html resolves into the subfolder).
 function ghPath(name){ return name.split("/").map(encodeURIComponent).join("/"); }
+// Base64-encode bytes in chunks — spreading a whole big array into
+// String.fromCharCode(...) blows the call stack on multi-MB guides.
+function bytesToB64(bytes){
+  let bin=""; const CH=0x8000;
+  for(let i=0;i<bytes.length;i+=CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i+CH));
+  return btoa(bin);
+}
 async function ghGet(name){
   const res = await gh(`/contents/${ghPath(name)}?ref=HEAD`);
   if(res.status===404) return null;
   if(!res.ok) throw new Error("GitHub "+res.status);
   const j = await res.json();
-  let text=""; try{ text = dec.decode(unb64((j.content||"").replace(/\s/g,""))); }catch(e){}
+  let text="";
+  if(j.content){ try{ text = dec.decode(unb64(j.content.replace(/\s/g,""))); }catch(e){} }
+  // Files over ~1MB come back with EMPTY content (encoding "none"). Our guides
+  // embed screenshots so they're routinely bigger — fetch the raw bytes instead.
+  if(!text){
+    try{
+      const raw = await gh(`/contents/${ghPath(name)}?ref=HEAD`, { headers:{ Accept:"application/vnd.github.raw" } });
+      if(raw.ok) text = await raw.text();
+    }catch(e){}
+  }
   return { sha:j.sha, text };
 }
 async function ghPut(name, content, sha, message){
-  const body = { message: message||("Update "+name), content: b64(enc.encode(content)) };
+  const body = { message: message||("Update "+name), content: bytesToB64(enc.encode(content)) };
   if(sha) body.sha = sha;
   const res = await gh(`/contents/${ghPath(name)}`, { method:"PUT", body:JSON.stringify(body) });
   if(!res.ok) throw new Error("GitHub "+res.status+": "+(await res.text()).slice(0,120));
