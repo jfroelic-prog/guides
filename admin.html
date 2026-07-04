@@ -242,7 +242,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-07-04b"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-07-04c"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -817,7 +817,11 @@ ${body}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
 <script type="application/json" id="stepsnap-data">${dataJson}<\/script>
 <script>
 (function(){
-  if(location.protocol==="file:"){ ["homeLink","copyLinkBtn","openTab"].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display="none";}); return; }
+  // When viewed locally (file://) the share controls don't apply — hide them.
+  if(location.protocol==="file:"){
+    ["homeLink","copyLinkBtn","openTab"].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display="none";});
+    return;
+  }
   var openTab=document.getElementById("openTab"); if(openTab) openTab.href=location.href;
   var btn=document.getElementById("copyLinkBtn");
   if(btn) btn.onclick=function(){
@@ -831,6 +835,8 @@ ${body}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
 <\/script>
 <script>
 (function(){
+  // View counter: quietly add +1 for this guide on open (fire-and-forget, ignored
+  // if the counter isn't set up or is unreachable). No personal data is sent.
   var COUNTER=${JSON.stringify(COUNTER_URL)};
   if(!COUNTER||COUNTER.indexOf("http")!==0||location.protocol==="file:")return;
   var g=(location.pathname.split("/").pop()||"").toLowerCase();
@@ -840,14 +846,18 @@ ${body}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
 <\/script>
 <script>
 (function(){
+  // Floating chapters: toggle on small screens + highlight the section in view.
   var toc=document.getElementById("toc"); if(!toc) return;
   var btn=document.getElementById("tocToggle");
   if(btn) btn.onclick=function(){ var o=toc.classList.toggle("open"); btn.setAttribute("aria-expanded",o); };
   var links=[].slice.call(toc.querySelectorAll("a"));
   links.forEach(function(a){ a.addEventListener("click",function(){ if(window.innerWidth<=920) toc.classList.remove("open"); }); });
   var heads=[].slice.call(document.querySelectorAll("h2.chapter"));
-  function spy(){ var cur=heads[0]; for(var i=0;i<heads.length;i++){ if(heads[i].getBoundingClientRect().top<=130) cur=heads[i]; }
-    links.forEach(function(a){ a.classList.toggle("active", !!cur && a.getAttribute("href")==="#"+cur.id); }); }
+  function spy(){
+    var cur=heads[0];
+    for(var i=0;i<heads.length;i++){ if(heads[i].getBoundingClientRect().top<=130) cur=heads[i]; }
+    links.forEach(function(a){ a.classList.toggle("active", !!cur && a.getAttribute("href")==="#"+cur.id); });
+  }
   window.addEventListener("scroll",spy,{passive:true}); window.addEventListener("resize",spy); spy();
 })();
 <\/script></body></html>`;
