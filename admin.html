@@ -105,6 +105,39 @@
   .shot-tools label{ display:flex; align-items:center; gap:5px; } .shot-tools input[type=checkbox]{ width:auto; }
   .shot-tools input[type=range]{ width:120px; padding:0; }
   .noshot{ padding:0 15px 14px; }
+
+  /* blur tool (drag boxes over sensitive info; baked in on publish) */
+  .blurbox{ position:absolute; backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+            background:rgba(200,195,185,.25); border:1px dashed transparent; }
+  .shotwrap.blurmode{ cursor:cell; }
+  .shotwrap.blurmode .blurbox{ border-color:var(--teal); }
+  .blurbox .rmblur{ position:absolute; top:-9px; right:-9px; width:18px; height:18px;
+       border-radius:50%; border:0; background:var(--teal); color:#fff; font-size:11px;
+       line-height:18px; padding:0; cursor:pointer; display:none; }
+  .shotwrap.blurmode .blurbox .rmblur{ display:block; }
+  .blurpreview{ position:absolute; border:1.5px dashed var(--teal); background:rgba(14,107,88,.12);
+                pointer-events:none; }
+  .modebtn{ border:1px solid var(--line); background:var(--card); border-radius:6px;
+            padding:3px 9px; cursor:pointer; font:600 12px var(--font); color:var(--ink); }
+  .modebtn.on{ background:var(--teal); color:#fff; border-color:var(--teal); }
+  .shot-tools .hint{ margin-left:auto; font-style:italic; }
+
+  /* GIF builder: selection checkboxes + bottom control bar */
+  .estep .sel-check{ display:none; }
+  body.gifmode .estep .sel-check{ display:grid; place-items:center; flex:none;
+    width:30px; height:30px; margin-top:2px; }
+  body.gifmode .estep .sel-check input{ width:18px; height:18px; accent-color:var(--teal); cursor:pointer; }
+  .estep.selected{ outline:2px solid var(--teal); outline-offset:2px; }
+  #gifBar{ display:none; position:fixed; bottom:0; left:0; right:0; z-index:60;
+    background:var(--ink); color:var(--paper); padding:14px 24px; gap:16px;
+    align-items:center; box-shadow:0 -10px 28px -16px rgba(0,0,0,.5); }
+  body.gifmode #gifBar{ display:flex; }
+  #gifBar .spacer{ flex:1; }
+  #gifBar label{ display:flex; align-items:center; gap:8px; font-size:13px; color:#e9e2d2; }
+  #gifBar input[type=range]{ accent-color:var(--gold); width:130px; }
+  #gifBar .btn{ background:transparent; color:var(--paper); border-color:#5a5246; }
+  #gifBar .btn.go{ background:var(--teal); border-color:var(--teal); color:#fff; }
+  #gifBar .btn[disabled]{ opacity:.45; cursor:not-allowed; }
 </style>
 </head>
 <body>
@@ -179,6 +212,7 @@
     <span class="sp"></span>
     <span class="saved" id="edStatus"></span>
     <button class="btn tiny" id="edBack">← Back to admin</button>
+    <button class="btn tiny" id="gifBtn" title="Combine step screenshots into a looping animation">🎞 GIF</button>
     <button class="btn primary tiny" id="edPublish">🚀 Publish</button>
   </div>
   <p class="sub" id="edWhere"></p>
@@ -193,11 +227,22 @@
     <button class="btn" id="edAddStep">+ Add step</button>
     <button class="btn" id="edAddChapter">📖 + Add chapter heading</button>
   </div>
+
+  <!-- GIF builder bar (shown while body.gifmode) -->
+  <div id="gifBar">
+    <b>🎞 Make a GIF</b> <span id="gifCount">Tick the steps to include</span>
+    <span class="spacer"></span>
+    <label>speed <input type="range" id="gifSpeed" min="400" max="2000" step="100" value="900">
+      <span id="gifSpeedVal">0.9s</span></label>
+    <button class="btn" id="gifCancel">Cancel</button>
+    <button class="btn go" id="gifCreate" disabled>Create GIF</button>
+  </div>
 </div>
 
+<script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-07-04a"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-07-04b"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -480,6 +525,7 @@ function escapeHtml(t){ return (t||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&
    lets you edit text/structure/highlights, then rebuilds + publishes it.
    =================================================================== */
 let ED = null; // the guide being edited: {file, draftPath, title, desc, author, unlisted, steps[]}
+let gifSelected = new Set(); // ids of steps ticked for the GIF builder
 
 /* --- ported helpers (kept identical to the extension so round-trips match) --- */
 const esc = escapeHtml;
@@ -532,6 +578,21 @@ function reencodeForEmbed(dataUrl){ return new Promise(res=>{
 
 /* --- editor UI --- */
 function positionHl(hl,s){ hl.style.left=(s.hx*100)+"%"; hl.style.top=(s.hy*100)+"%"; hl.style.width=((s.hr||0.045)*200)+"%"; hl.style.aspectRatio="1"; }
+function clampBox(c){
+  const x=Math.max(0,Math.min(1,c.x)), y=Math.max(0,Math.min(1,c.y));
+  return { x, y, w:Math.min(1-x,c.w), h:Math.min(1-y,c.h) };
+}
+// Add/replace a step's screenshot from an image file on this computer.
+function edReplaceImage(s){
+  const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*";
+  inp.onchange=()=>{
+    const f=inp.files[0]; if(!f) return;
+    const r=new FileReader();
+    r.onload=()=>{ s.img=r.result; s.showHl=false; edRender(); };
+    r.readAsDataURL(f);
+  };
+  inp.click();
+}
 function edGrow(t){ t.style.height="auto"; t.style.height=t.scrollHeight+"px"; }
 function edMove(i,dir){ const j=i+dir; if(j<0||j>=ED.steps.length) return; [ED.steps[i],ED.steps[j]]=[ED.steps[j],ED.steps[i]]; edRender(); }
 function edIbtn(txt,title,fn,danger){ const b=document.createElement("button"); b.className="ibtn"+(danger?" danger":""); b.textContent=txt; b.title=title; b.onclick=fn; return b; }
@@ -552,7 +613,16 @@ function edRender(){
 function edCard(s,i,badge){
   const el=document.createElement("div");
   el.className="estep"+(calloutIcon[s.type]?" callout "+s.type:"")+(s.type==="chapter"?" chapter":"");
+  if(gifSelected.has(s.id)) el.classList.add("selected");
   const head=document.createElement("div"); head.className="ehead";
+  // GIF builder: tick-box to include this step's screenshot (visible in GIF mode)
+  const selWrap=document.createElement("label"); selWrap.className="sel-check";
+  selWrap.title="Include this step's screenshot in the GIF";
+  const selBox=document.createElement("input"); selBox.type="checkbox";
+  selBox.checked=gifSelected.has(s.id);
+  selBox.onchange=()=>{ if(selBox.checked) gifSelected.add(s.id); else gifSelected.delete(s.id);
+    el.classList.toggle("selected", selBox.checked); updateGifBar(); };
+  selWrap.append(selBox);
   const num=document.createElement("div"); num.className="enum"; num.textContent=badge; num.title="Drag to reorder";
   const fields=document.createElement("div"); fields.className="efields";
   const title=document.createElement("input"); title.className="etitle"; title.value=s.title||"";
@@ -573,19 +643,68 @@ function edCard(s,i,badge){
   tools.append(
     edIbtn("↑","Move up",()=>edMove(i,-1)),
     edIbtn("↓","Move down",()=>edMove(i,1)),
+    edIbtn("📷","Add or replace the screenshot with an image file",()=>edReplaceImage(s)),
     edIbtn("⧉","Duplicate",()=>{ ED.steps.splice(i+1,0,{...s,id:edUid()}); edRender(); }),
     edIbtn("✕","Delete",()=>{ if(confirm("Delete this step?")){ ED.steps.splice(i,1); edRender(); } },true)
   );
-  head.append(num,fields,tools); el.append(head);
+  head.append(selWrap,num,fields,tools); el.append(head);
 
   if(s.img){
     const wrap=document.createElement("div"); wrap.className="shotwrap aim";
     const img=document.createElement("img"); img.src=s.img; img.draggable=false; wrap.append(img);
     if(s.showHl){ const hl=document.createElement("div"); hl.className="hl"; positionHl(hl,s); wrap.append(hl); }
-    wrap.title="Click to move the highlight circle";
-    wrap.onclick=(e)=>{ const r=wrap.getBoundingClientRect(); s.hx=(e.clientX-r.left)/r.width; s.hy=(e.clientY-r.top)/r.height; s.showHl=true; edRender(); };
+
+    /* existing blur regions (baked into the picture on publish) */
+    (s.blurs||[]).forEach((b,bi)=>{
+      const box=document.createElement("div"); box.className="blurbox";
+      box.style.left=b.x*100+"%"; box.style.top=b.y*100+"%";
+      box.style.width=b.w*100+"%"; box.style.height=b.h*100+"%";
+      const rmb=document.createElement("button"); rmb.className="rmblur"; rmb.textContent="✕"; rmb.title="Remove this blur";
+      rmb.onclick=(e)=>{ e.stopPropagation(); s.blurs.splice(bi,1); edRender(); };
+      box.append(rmb); wrap.append(box);
+    });
+
+    let blurMode=false, drag=null;
+    wrap.onmousedown=(e)=>{
+      if(!blurMode || e.target.classList.contains("rmblur")) return;
+      const r=wrap.getBoundingClientRect();
+      drag={ x:(e.clientX-r.left)/r.width, y:(e.clientY-r.top)/r.height, r, box:document.createElement("div") };
+      drag.box.className="blurpreview"; wrap.append(drag.box); e.preventDefault();
+    };
+    wrap.onmousemove=(e)=>{
+      if(!drag) return;
+      const cx=(e.clientX-drag.r.left)/drag.r.width, cy=(e.clientY-drag.r.top)/drag.r.height;
+      const x=Math.min(drag.x,cx), y=Math.min(drag.y,cy);
+      const w=Math.abs(cx-drag.x), h=Math.abs(cy-drag.y);
+      Object.assign(drag.box.style,{ left:x*100+"%", top:y*100+"%", width:w*100+"%", height:h*100+"%" });
+      drag.cur={x,y,w,h};
+    };
+    const endDrag=()=>{
+      if(!drag) return;
+      const c=drag.cur; drag.box.remove(); drag=null;
+      if(c && c.w>0.01 && c.h>0.01){ (s.blurs=s.blurs||[]).push(clampBox(c)); edRender(); }
+    };
+    wrap.onmouseup=endDrag; wrap.onmouseleave=endDrag;
+
+    wrap.title="Click to move the highlight · Blur mode: drag to hide sensitive info";
+    wrap.onclick=(e)=>{
+      if(blurMode || e.target.classList.contains("rmblur")) return;
+      const r=wrap.getBoundingClientRect();
+      s.hx=(e.clientX-r.left)/r.width; s.hy=(e.clientY-r.top)/r.height; s.showHl=true; edRender();
+    };
     el.append(wrap);
+
     const st=document.createElement("div"); st.className="shot-tools";
+    const blurBtn=document.createElement("button"); blurBtn.className="modebtn"; blurBtn.textContent="🌫 Blur";
+    blurBtn.title="Toggle blur mode, then drag boxes over anything sensitive";
+    blurBtn.onclick=()=>{
+      blurMode=!blurMode;
+      blurBtn.classList.toggle("on",blurMode);
+      wrap.classList.toggle("blurmode",blurMode);
+      hint.textContent = blurMode
+        ? "drag on the image to blur an area · ✕ removes a blur"
+        : "click image to reposition circle";
+    };
     const tog=document.createElement("label"); const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=!!s.showHl;
     cb.onchange=()=>{ s.showHl=cb.checked; edRender(); }; tog.append(cb, document.createTextNode(" show highlight"));
     const sizeLbl=document.createElement("label"); const range=document.createElement("input"); range.type="range"; range.min=2; range.max=15; range.step=0.5; range.value=(s.hr||0.045)*100;
@@ -593,10 +712,12 @@ function edCard(s,i,badge){
     sizeLbl.append(document.createTextNode("size "), range);
     const rm=document.createElement("button"); rm.className="ibtn danger"; rm.textContent="🖼✕"; rm.title="Remove screenshot"; rm.style.width="auto"; rm.style.padding="0 8px";
     rm.onclick=()=>{ if(confirm("Remove this screenshot?")){ s.img=null; edRender(); } };
-    st.append(tog,sizeLbl,rm);
+    const hint=document.createElement("span"); hint.className="hint"; hint.textContent="click image to reposition circle";
+    st.append(blurBtn,tog,sizeLbl,rm,hint);
     el.append(st);
   } else if(s.type!=="chapter" && !calloutIcon[s.type] && s.type!=="nav"){
-    const no=document.createElement("div"); no.className="noshot note"; no.textContent="No screenshot on this step.";
+    const no=document.createElement("div"); no.className="noshot note";
+    no.textContent="No screenshot on this step — use 📷 above to add one.";
     el.append(no);
   }
 
@@ -733,14 +854,91 @@ ${body}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
   return { html, fileName };
 }
 
+/* --- GIF maker: combine selected steps' screenshots into a looping animation --- */
+function updateGifBar(){
+  const n=gifStepsForGif().length;
+  $("gifCount").textContent = n ? `${n} screenshot${n===1?"":"s"} selected` : "Tick the steps to include";
+  $("gifCreate").disabled = n<2;
+}
+// Ticked steps that actually have a screenshot, kept in guide order.
+function gifStepsForGif(){ return ED ? ED.steps.filter(s=>gifSelected.has(s.id)&&s.img) : []; }
+function exitGifMode(){
+  document.body.classList.remove("gifmode");
+  $("gifBtn").classList.remove("primary");
+  gifSelected.clear();
+}
+$("gifBtn").onclick=()=>{
+  if(!ED) return;
+  if(typeof StepSnapGIF==="undefined"){ alert("The GIF encoder (gif.js) isn't on the site yet — re-run the site deploy."); return; }
+  const on=!document.body.classList.contains("gifmode");
+  document.body.classList.toggle("gifmode",on);
+  $("gifBtn").classList.toggle("primary",on);
+  if(!on){ gifSelected.clear(); edRender(); }
+  updateGifBar();
+};
+$("gifCancel").onclick=()=>{ exitGifMode(); edRender(); };
+$("gifSpeed").oninput=()=>{ $("gifSpeedVal").textContent=($("gifSpeed").value/1000).toFixed(1)+"s"; };
+$("gifCreate").onclick=async()=>{
+  const chosen=gifStepsForGif();
+  if(chosen.length<2) return;
+  $("gifCreate").disabled=true; edStatus("Building GIF…");
+  try{
+    // Bake in any highlight/blur first, then load each image.
+    const urls=await Promise.all(chosen.map(flatten));
+    const imgs=await Promise.all(urls.map(loadImage));
+    // All frames share one size: fit each screenshot inside a common canvas
+    // (max 960px wide) on white, preserving aspect ratio.
+    const maxW=960;
+    const W=Math.min(maxW, Math.max(...imgs.map(im=>im.naturalWidth)));
+    const H=Math.round(W*Math.max(...imgs.map(im=>im.naturalHeight/im.naturalWidth)));
+    const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+    const ctx=cv.getContext("2d");
+    const frames=imgs.map(im=>{
+      ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,W,H);
+      const scale=Math.min(W/im.naturalWidth, H/im.naturalHeight);
+      const w=im.naturalWidth*scale, h=im.naturalHeight*scale;
+      ctx.drawImage(im,(W-w)/2,(H-h)/2,w,h);
+      return ctx.getImageData(0,0,W,H).data;
+    });
+    const bytes=StepSnapGIF.encode(frames,{ width:W, height:H, delay:+$("gifSpeed").value, loop:0 });
+    // 1) download the .gif  2) insert it as a new step so it lives in the guide
+    edDownload(edSlug(ED.title)+"-animation.gif","image/gif",bytes);
+    const gifUrl=await bytesToDataUrl(bytes,"image/gif");
+    ED.steps.push({ id:edUid(), type:"note", title:"Animated overview", desc:"",
+                    img:gifUrl, hx:.5, hy:.5, hr:.045, showHl:false, blurs:[] });
+    exitGifMode(); edRender();
+    edStatus("GIF created ✓ (downloaded + added as a step)");
+    window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"});
+  }catch(e){
+    console.error(e);
+    edStatus(""); alert("GIF failed — try fewer or smaller steps.\n\n"+e.message);
+    $("gifCreate").disabled=false;
+  }
+};
+function loadImage(src){ return new Promise((res,rej)=>{
+  if(!src) return rej(new Error("no image"));
+  const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=src;
+}); }
+function bytesToDataUrl(bytes,mime){ return new Promise(res=>{
+  const r=new FileReader(); r.onload=()=>res(r.result);
+  r.readAsDataURL(new Blob([bytes],{type:mime}));
+}); }
+function edDownload(name,mime,content){
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([content],{type:mime}));
+  a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+}
+
 /* --- open / publish / navigate --- */
 function showEditor(where){
+  exitGifMode();
   $("app").classList.add("hidden"); $("editor").classList.remove("hidden");
   $("edWhere").textContent=where||"";
   $("edTitle").value=ED.title; $("edDesc").value=ED.desc; $("edAuthor").value=ED.author; $("edUnlisted").checked=!!ED.unlisted;
   edStatus(""); edRender(); window.scrollTo(0,0);
 }
-function showApp(){ $("editor").classList.add("hidden"); $("app").classList.remove("hidden"); ED=null; window.scrollTo(0,0); }
+function showApp(){ exitGifMode(); $("editor").classList.add("hidden"); $("app").classList.remove("hidden"); ED=null; window.scrollTo(0,0); }
 
 async function edOpen(pathOrFile, isDraft){
   status("Opening editor…");
