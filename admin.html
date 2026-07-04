@@ -98,9 +98,15 @@
   .ibtn:hover{ border-color:var(--gold); } .ibtn.danger{ color:var(--accent); border-color:#e7c7c2; }
   .shotwrap{ position:relative; margin:0 15px 12px; }
   .shotwrap img{ display:block; width:100%; border-radius:8px; border:1px solid var(--line); }
-  .shotwrap .hl{ position:absolute; transform:translate(-50%,-50%); border:3px solid #f97316; border-radius:50%;
-    box-shadow:0 0 0 3px rgba(249,115,22,.25); pointer-events:none; }
+  /* click targets: any number per step, each its own colour + shape */
+  .shotwrap .tgt{ position:absolute; border:3px solid #f97316; cursor:pointer; }
+  .shotwrap .tgt.circle{ transform:translate(-50%,-50%); border-radius:50%; aspect-ratio:1; }
+  .shotwrap .tgt.box{ border-radius:6px; }
+  .shotwrap .tgt.sel{ box-shadow:0 0 0 2px #fff, 0 0 0 4px #211d17; }
   .shotwrap.aim{ cursor:crosshair; }
+  .shot-tools input[type=color]{ width:30px; height:26px; padding:1px; border:1px solid var(--line);
+    border-radius:6px; background:var(--card); cursor:pointer; }
+  .shot-tools .dis{ opacity:.35; pointer-events:none; }
   .shot-tools{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:0 15px 14px; font-size:12.5px; color:var(--muted); }
   .shot-tools label{ display:flex; align-items:center; gap:5px; } .shot-tools input[type=checkbox]{ width:auto; }
   .shot-tools input[type=range]{ width:120px; padding:0; }
@@ -242,7 +248,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-07-04c"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-07-04d"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -526,13 +532,15 @@ function escapeHtml(t){ return (t||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&
    =================================================================== */
 let ED = null; // the guide being edited: {file, draftPath, title, desc, author, unlisted, steps[]}
 let gifSelected = new Set(); // ids of steps ticked for the GIF builder
+const edSel = {};            // step.id -> index of the selected click target (transient)
+let edColor = "#f97316";     // last-used target colour; the default for new targets
 
 /* --- ported helpers (kept identical to the extension so round-trips match) --- */
 const esc = escapeHtml;
 const calloutIcon = { tip:"💡", alert:"⚠️", warning:"🔔" };
 function edSlug(t){ return ((t||"guide").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,""))||"guide"; }
 function edUid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
-function edBlank(type,title){ return { id:edUid(), type, title, desc:"", img:null, hx:.5, hy:.5, hr:.045, showHl:false, blurs:[] }; }
+function edBlank(type,title){ return { id:edUid(), type, title, desc:"", img:null, hx:.5, hy:.5, hr:.045, showHl:false, blurs:[], targets:[] }; }
 function edStatus(t){ $("edStatus").textContent=t||""; }
 function linkify(raw){
   raw=(raw||"").replace(/<((?:https?:\/\/)[^>\s]+)>/g,"$1");
@@ -544,11 +552,25 @@ function linkify(raw){
   return out+esc(raw.slice(last));
 }
 function linkifyML(raw){ return linkify(raw).replace(/\n/g,"<br>"); }
+// The click-target list for a step. New model: s.targets = array of
+//   { shape:"circle", x, y, r, color }  (x/y = centre, fractions of the image)
+//   { shape:"box",    x, y, w, h, color } (x/y = top-left, like blur boxes)
+// Legacy guides carry one highlight in hx/hy/hr/showHl — converted to a
+// one-circle list here. KEEP FUNCTIONALLY IDENTICAL to extension/export.js.
+function targetsOf(s){
+  if(Array.isArray(s.targets))
+    return s.targets.filter(t=>t && (t.shape==="box" ? t.w>0&&t.h>0 : true));
+  if(s.showHl)
+    return [{ shape:"circle", x:(typeof s.hx==="number"?s.hx:0.5),
+              y:(typeof s.hy==="number"?s.hy:0.5), r:(s.hr||0.045), color:"#f97316" }];
+  return [];
+}
 function flatten(s){ return new Promise(res=>{
   if(!s.img) return res(null);
   if(s.img.startsWith("data:image/gif")) return res(s.img);       // keep GIFs animated
+  const targets=targetsOf(s);
   const hasBlur=s.blurs&&s.blurs.length;
-  if(!s.showHl&&!hasBlur) return res(s.img);
+  if(!targets.length&&!hasBlur) return res(s.img);
   const im=new Image();
   im.onload=()=>{ const c=document.createElement("canvas"); c.width=im.width; c.height=im.height;
     const x=c.getContext("2d"); x.drawImage(im,0,0);
@@ -556,8 +578,12 @@ function flatten(s){ return new Promise(res=>{
       const t=document.createElement("canvas"); const f=16; t.width=Math.max(1,Math.round(bw/f)); t.height=Math.max(1,Math.round(bh/f));
       t.getContext("2d").drawImage(im,bx,by,bw,bh,0,0,t.width,t.height);
       x.imageSmoothingEnabled=false; x.drawImage(t,0,0,t.width,t.height,bx,by,bw,bh); x.imageSmoothingEnabled=true; } }
-    if(s.showHl){ x.beginPath(); x.arc(s.hx*im.width,s.hy*im.height,(s.hr||0.045)*im.width,0,Math.PI*2);
-      x.lineWidth=Math.max(4,im.width*0.004); x.strokeStyle="#f97316"; x.stroke(); }
+    for(const t of targets){
+      x.lineWidth=Math.max(4,im.width*0.004);
+      x.strokeStyle=t.color||"#f97316"; // default: orange, like Scribe
+      if(t.shape==="box"){ x.strokeRect(t.x*im.width, t.y*im.height, t.w*im.width, t.h*im.height); }
+      else { x.beginPath(); x.arc(t.x*im.width, t.y*im.height, (t.r||0.045)*im.width, 0, Math.PI*2); x.stroke(); }
+    }
     res(c.toDataURL("image/jpeg",0.85)); };
   im.onerror=()=>res(s.img); im.src=s.img;
 }); }
@@ -577,7 +603,24 @@ function reencodeForEmbed(dataUrl){ return new Promise(res=>{
 }); }
 
 /* --- editor UI --- */
-function positionHl(hl,s){ hl.style.left=(s.hx*100)+"%"; hl.style.top=(s.hy*100)+"%"; hl.style.width=((s.hr||0.045)*200)+"%"; hl.style.aspectRatio="1"; }
+// Place a target overlay element over the screenshot.
+function positionTgt(el,t){
+  if(t.shape==="box"){
+    el.style.left=(t.x*100)+"%"; el.style.top=(t.y*100)+"%";
+    el.style.width=(t.w*100)+"%"; el.style.height=(t.h*100)+"%";
+  } else {
+    el.style.left=(t.x*100)+"%"; el.style.top=(t.y*100)+"%";
+    el.style.width=((t.r||0.045)*200)+"%"; el.style.height="";
+  }
+  el.style.borderColor=t.color||"#f97316";
+}
+// Keep the legacy single-highlight fields mirroring the first circle target, so
+// anything that still reads hx/hy/hr/showHl (e.g. old exports) stays sensible.
+function syncLegacy(s){
+  const c=(s.targets||[]).find(t=>t.shape!=="box");
+  if(c){ s.hx=c.x; s.hy=c.y; s.hr=c.r||0.045; s.showHl=true; }
+  else s.showHl=false;
+}
 function clampBox(c){
   const x=Math.max(0,Math.min(1,c.x)), y=Math.max(0,Math.min(1,c.y));
   return { x, y, w:Math.min(1-x,c.w), h:Math.min(1-y,c.h) };
@@ -644,15 +687,33 @@ function edCard(s,i,badge){
     edIbtn("↑","Move up",()=>edMove(i,-1)),
     edIbtn("↓","Move down",()=>edMove(i,1)),
     edIbtn("📷","Add or replace the screenshot with an image file",()=>edReplaceImage(s)),
-    edIbtn("⧉","Duplicate",()=>{ ED.steps.splice(i+1,0,{...s,id:edUid()}); edRender(); }),
+    edIbtn("⧉","Duplicate",()=>{ ED.steps.splice(i+1,0,{ ...s, id:edUid(),
+      blurs:(s.blurs||[]).map(b=>({...b})), targets:(s.targets||[]).map(t=>({...t})) }); edRender(); }),
     edIbtn("✕","Delete",()=>{ if(confirm("Delete this step?")){ ED.steps.splice(i,1); edRender(); } },true)
   );
   head.append(selWrap,num,fields,tools); el.append(head);
 
   if(s.img){
+    if(!Array.isArray(s.targets)) s.targets=[];
+    // Which target is selected on this card (clamped; -1 = none).
+    let sel = edSel[s.id];
+    if(!Number.isInteger(sel) || sel<0 || sel>=s.targets.length) sel = s.targets.length ? 0 : -1;
+    edSel[s.id]=sel;
+    const selT = sel>=0 ? s.targets[sel] : null;
+
     const wrap=document.createElement("div"); wrap.className="shotwrap aim";
     const img=document.createElement("img"); img.src=s.img; img.draggable=false; wrap.append(img);
-    if(s.showHl){ const hl=document.createElement("div"); hl.className="hl"; positionHl(hl,s); wrap.append(hl); }
+
+    /* click targets (any number; click one to select it) */
+    const tgtEls=[];
+    s.targets.forEach((t,ti)=>{
+      const tg=document.createElement("div");
+      tg.className="tgt "+(t.shape==="box"?"box":"circle")+(ti===sel?" sel":"");
+      positionTgt(tg,t);
+      tg.title="Click to select this target";
+      tg.onclick=(e)=>{ e.stopPropagation(); edSel[s.id]=ti; edRender(); };
+      tgtEls.push(tg); wrap.append(tg);
+    });
 
     /* existing blur regions (baked into the picture on publish) */
     (s.blurs||[]).forEach((b,bi)=>{
@@ -664,12 +725,15 @@ function edCard(s,i,badge){
       box.append(rmb); wrap.append(box);
     });
 
-    let blurMode=false, drag=null;
+    /* drag modes: blur boxes and box-shaped targets share the same gesture */
+    let blurMode=false, boxMode=false, drag=null;
     wrap.onmousedown=(e)=>{
-      if(!blurMode || e.target.classList.contains("rmblur")) return;
+      if((!blurMode && !boxMode) || e.target.classList.contains("rmblur")) return;
       const r=wrap.getBoundingClientRect();
       drag={ x:(e.clientX-r.left)/r.width, y:(e.clientY-r.top)/r.height, r, box:document.createElement("div") };
-      drag.box.className="blurpreview"; wrap.append(drag.box); e.preventDefault();
+      drag.box.className="blurpreview";
+      if(boxMode) drag.box.style.borderColor=edColor;
+      wrap.append(drag.box); e.preventDefault();
     };
     wrap.onmousemove=(e)=>{
       if(!drag) return;
@@ -682,38 +746,94 @@ function edCard(s,i,badge){
     const endDrag=()=>{
       if(!drag) return;
       const c=drag.cur; drag.box.remove(); drag=null;
-      if(c && c.w>0.01 && c.h>0.01){ (s.blurs=s.blurs||[]).push(clampBox(c)); edRender(); }
+      if(c && c.w>0.01 && c.h>0.01){
+        if(boxMode){
+          s.targets.push({ shape:"box", ...clampBox(c), color:edColor });
+          edSel[s.id]=s.targets.length-1;
+          syncLegacy(s);
+        } else {
+          (s.blurs=s.blurs||[]).push(clampBox(c));
+        }
+        edRender();
+      }
     };
     wrap.onmouseup=endDrag; wrap.onmouseleave=endDrag;
 
-    wrap.title="Click to move the highlight · Blur mode: drag to hide sensitive info";
+    wrap.title="Click a target to select it · click the image to move the selected target";
     wrap.onclick=(e)=>{
-      if(blurMode || e.target.classList.contains("rmblur")) return;
+      if(blurMode || boxMode || e.target.classList.contains("rmblur")) return;
       const r=wrap.getBoundingClientRect();
-      s.hx=(e.clientX-r.left)/r.width; s.hy=(e.clientY-r.top)/r.height; s.showHl=true; edRender();
+      const cx=(e.clientX-r.left)/r.width, cy=(e.clientY-r.top)/r.height;
+      if(!s.targets.length){
+        // first click on a bare screenshot drops a circle right there (old habit)
+        s.targets.push({ shape:"circle", x:cx, y:cy, r:.045, color:edColor });
+        edSel[s.id]=0;
+      } else {
+        const t=s.targets[edSel[s.id]];
+        if(t.shape==="box"){
+          t.x=Math.max(0, Math.min(1-t.w, cx-t.w/2));
+          t.y=Math.max(0, Math.min(1-t.h, cy-t.h/2));
+        } else { t.x=cx; t.y=cy; }
+      }
+      syncLegacy(s); edRender();
     };
     el.append(wrap);
 
     const st=document.createElement("div"); st.className="shot-tools";
+    // add a circle target immediately (then click the image to place it)
+    const addC=document.createElement("button"); addC.className="modebtn"; addC.textContent="🎯 + circle";
+    addC.title="Add a circle target (then click the image to move it)";
+    addC.onclick=()=>{
+      s.targets.push({ shape:"circle", x:.5, y:.5, r:.045, color:edColor });
+      edSel[s.id]=s.targets.length-1; syncLegacy(s); edRender();
+    };
+    // draw a box target by dragging
+    const addB=document.createElement("button"); addB.className="modebtn"; addB.textContent="▭ + box";
+    addB.title="Draw a box target: click this, then drag on the image";
+    addB.onclick=()=>{
+      boxMode=!boxMode; if(boxMode){ blurMode=false; blurBtn.classList.remove("on"); }
+      addB.classList.toggle("on",boxMode);
+      wrap.classList.toggle("blurmode",boxMode||blurMode);
+      hint.textContent = boxMode ? "drag on the image to draw the box target"
+                                 : "click a target to select · click the image to move it";
+    };
     const blurBtn=document.createElement("button"); blurBtn.className="modebtn"; blurBtn.textContent="🌫 Blur";
     blurBtn.title="Toggle blur mode, then drag boxes over anything sensitive";
     blurBtn.onclick=()=>{
-      blurMode=!blurMode;
+      blurMode=!blurMode; if(blurMode){ boxMode=false; addB.classList.remove("on"); }
       blurBtn.classList.toggle("on",blurMode);
-      wrap.classList.toggle("blurmode",blurMode);
+      wrap.classList.toggle("blurmode",blurMode||boxMode);
       hint.textContent = blurMode
         ? "drag on the image to blur an area · ✕ removes a blur"
-        : "click image to reposition circle";
+        : "click a target to select · click the image to move it";
     };
-    const tog=document.createElement("label"); const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=!!s.showHl;
-    cb.onchange=()=>{ s.showHl=cb.checked; edRender(); }; tog.append(cb, document.createTextNode(" show highlight"));
-    const sizeLbl=document.createElement("label"); const range=document.createElement("input"); range.type="range"; range.min=2; range.max=15; range.step=0.5; range.value=(s.hr||0.045)*100;
-    range.oninput=()=>{ s.hr=range.value/100; const h=wrap.querySelector(".hl"); if(h) positionHl(h,s); };
+    // colour of the selected target (and the default for new ones)
+    const colorInp=document.createElement("input"); colorInp.type="color";
+    colorInp.value=(selT && selT.color) || edColor;
+    colorInp.title="Target colour (applies to the selected target and new ones)";
+    colorInp.oninput=()=>{
+      edColor=colorInp.value;
+      if(selT){ selT.color=edColor; const n=tgtEls[sel]; if(n) n.style.borderColor=edColor; }
+    };
+    // size slider — circles only (redraw a box to resize it)
+    const sizeLbl=document.createElement("label");
+    const range=document.createElement("input"); range.type="range"; range.min=2; range.max=15; range.step=0.5;
+    range.value=(selT && selT.shape!=="box" ? (selT.r||0.045) : 0.045)*100;
+    range.oninput=()=>{ if(!selT||selT.shape==="box") return; selT.r=range.value/100;
+      const n=tgtEls[sel]; if(n) positionTgt(n,selT); syncLegacy(s); };
     sizeLbl.append(document.createTextNode("size "), range);
+    if(!selT || selT.shape==="box") sizeLbl.className="dis";
+    // remove the selected target
+    const delT=document.createElement("button"); delT.className="ibtn danger"; delT.textContent="🎯✕";
+    delT.title="Remove the selected target"; delT.style.width="auto"; delT.style.padding="0 8px";
+    if(!selT) delT.classList.add("dis");
+    delT.onclick=()=>{ if(sel<0) return; s.targets.splice(sel,1);
+      edSel[s.id]=Math.min(sel, s.targets.length-1); syncLegacy(s); edRender(); };
     const rm=document.createElement("button"); rm.className="ibtn danger"; rm.textContent="🖼✕"; rm.title="Remove screenshot"; rm.style.width="auto"; rm.style.padding="0 8px";
     rm.onclick=()=>{ if(confirm("Remove this screenshot?")){ s.img=null; edRender(); } };
-    const hint=document.createElement("span"); hint.className="hint"; hint.textContent="click image to reposition circle";
-    st.append(blurBtn,tog,sizeLbl,rm,hint);
+    const hint=document.createElement("span"); hint.className="hint";
+    hint.textContent="click a target to select · click the image to move it";
+    st.append(addC,addB,blurBtn,colorInp,sizeLbl,delT,rm,hint);
     el.append(st);
   } else if(s.type!=="chapter" && !calloutIcon[s.type] && s.type!=="nav"){
     const no=document.createElement("div"); no.className="noshot note";
@@ -974,7 +1094,11 @@ async function edOpen(pathOrFile, isDraft){
     const p=JSON.parse(el.textContent);
     ED={ file:(p.file || (isDraft?null:pathOrFile)), draftPath:(isDraft?pathOrFile:null),
       title:p.title||"", desc:p.desc||"", author:p.author||"", unlisted:!!p.unlisted,
-      steps:(p.steps||[]).map(s=>({ ...s, blurs:s.blurs||[] })) };
+      steps:(p.steps||[]).map(s=>({ ...s, blurs:s.blurs||[],
+        // Migrate the legacy single highlight into the multi-target list.
+        targets: Array.isArray(s.targets) ? s.targets
+          : (s.showHl ? [{ shape:"circle", x:(typeof s.hx==="number"?s.hx:.5),
+                           y:(typeof s.hy==="number"?s.hy:.5), r:(s.hr||0.045), color:"#f97316" }] : []) })) };
     if(!ED.file) ED.file=edSlug(ED.title)+".html";
     showEditor(isDraft ? ("Draft “"+pathOrFile.replace(/^drafts\//,"")+"” — publishing will post it live and remove the draft.")
                        : ("Editing the live guide “"+pathOrFile+"” — publishing overwrites it."));
