@@ -138,6 +138,7 @@
       Forgot it, or new key? <a href="#" id="forget">Reset this device</a>
       (re-enter the team key).</p>
   </div>
+  <p class="note" id="gateBuild" style="margin-top:16px"></p>
 </div>
 
 <!-- ============ APP ============ -->
@@ -196,6 +197,7 @@
 
 <script>
 /* ===== config ===== */
+const ADMIN_BUILD = "2026-07-04a"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -213,7 +215,7 @@ const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 const enc = new TextEncoder(), dec = new TextDecoder();
 function status(t){ $("status").textContent = t || ""; if(t) setTimeout(()=>{ if($("status").textContent===t) $("status").textContent=""; }, 4000); }
 function splitRepo(r){ const i=r.indexOf("/"); return [r.slice(0,i), r.slice(i+1)]; }
-function siteUrl(file){ const [o,r]=splitRepo(REPO); return `https://${o}.github.io/${r}/${encodeURIComponent(file)}`; }
+function siteUrl(file){ const [o,r]=splitRepo(REPO); return `https://${o}.github.io/${r}/${ghPath(file)}`; }
 
 /* ===== password crypto (AES-GCM key derived from password via PBKDF2) ===== */
 async function deriveKey(password, salt){
@@ -251,28 +253,57 @@ function bytesToB64(bytes){
   for(let i=0;i<bytes.length;i+=CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i+CH));
   return btoa(bin);
 }
+// Read a repo file. Files over ~1MB return EMPTY inline content from the
+// contents API (encoding "none"), and our guides embed screenshots so they
+// routinely exceed that — so this walks a chain of fallbacks until one yields
+// the text. (The "raw" media type is NOT in the chain: cross-origin in a
+// browser it returns a truncated ~900-byte stub even though curl gets the file.)
+//   1. inline base64 from the contents API          (<1MB files)
+//   2. Git blobs API with the team key              (base64 JSON, CORS-safe, ≤100MB)
+//   3. Git blobs API WITHOUT auth                   (public repo; covers fine-grained
+//      keys that GitHub denies on /git/* endpoints)
+//   4. the live site's own copy, same-origin        (any size; lags a fresh push ~1min)
+// Returns { sha, text, via, tried } — `via` = which method worked, `tried` = failures.
 async function ghGet(name){
   const res = await gh(`/contents/${ghPath(name)}?ref=HEAD`);
   if(res.status===404) return null;
   if(!res.ok) throw new Error("GitHub "+res.status);
   const j = await res.json();
-  let text="";
-  if(j.content){ try{ text = dec.decode(unb64(j.content.replace(/\s/g,""))); }catch(e){} }
-  // Files over ~1MB return EMPTY inline content (encoding "none"), and our guides
-  // embed screenshots so they routinely exceed that. NOTE: the "raw" media type
-  // is unreliable cross-origin from a browser — it returns a truncated stub (~900
-  // bytes) even though it works from curl. So pull the blob by sha instead: the
-  // Git blobs API returns base64 JSON up to 100MB, with proper CORS, in-browser.
+  const tried = [];
+  let text="", via="inline";
+  if(j.content){ try{ text = dec.decode(unb64(j.content.replace(/\s/g,""))); }catch(e){ tried.push("inline decode-fail"); } }
   if(!text && j.sha){
     try{
       const blob = await gh(`/git/blobs/${j.sha}`);
       if(blob.ok){
         const b = await blob.json();
-        if(b.content) text = dec.decode(unb64(b.content.replace(/\s/g,"")));
-      }
-    }catch(e){}
+        if(b.content){ text = dec.decode(unb64(b.content.replace(/\s/g,""))); via="blob"; }
+        else tried.push("blob empty");
+      } else tried.push("blob "+blob.status);
+    }catch(e){ tried.push("blob network-error"); }
   }
-  return { sha:j.sha, text };
+  if(!text && j.sha){
+    try{
+      const [o,r]=splitRepo(REPO);
+      const blob = await fetch(`${API_BASE}/repos/${o}/${r}/git/blobs/${j.sha}`,
+        { headers:{ Accept:"application/vnd.github+json" } });
+      if(blob.ok){
+        const b = await blob.json();
+        if(b.content){ text = dec.decode(unb64(b.content.replace(/\s/g,""))); via="blob-public"; }
+        else tried.push("public-blob empty");
+      } else tried.push("public-blob "+blob.status);
+    }catch(e){ tried.push("public-blob network-error"); }
+  }
+  if(!text){
+    try{
+      const r2 = await fetch(siteUrl(name)+"?cb="+Date.now(), { cache:"no-store" });
+      if(r2.ok){ text = await r2.text(); via="site"; }
+      else tried.push("site "+r2.status);
+    }catch(e){ tried.push("site network-error"); }
+  }
+  if(!text) console.warn("[StepSnap admin "+ADMIN_BUILD+"] couldn't read "+name+" — tried: "+tried.join(", "));
+  else if(via!=="inline") console.log("[StepSnap admin "+ADMIN_BUILD+"] read "+name+" via "+via);
+  return { sha:j.sha, text, via, tried };
 }
 async function ghPut(name, content, sha, message){
   const body = { message: message||("Update "+name), content: bytesToB64(enc.encode(content)) };
@@ -292,7 +323,7 @@ async function ghDelete(name, sha, message){
 async function loadAll(){
   status("Loading…");
   const [o,r]=splitRepo(REPO);
-  $("siteLine").innerHTML = `Managing <a href="https://${o}.github.io/${r}/" target="_blank">${o}.github.io/${r}</a>`;
+  $("siteLine").innerHTML = `Managing <a href="https://${o}.github.io/${r}/" target="_blank">${o}.github.io/${r}</a> · admin build ${ADMIN_BUILD}`;
   // repo files
   const res = await gh(`/contents`);
   if(res.status===401||res.status===403) throw new Error("auth");
@@ -390,6 +421,8 @@ async function renameGuide(g){
   status("Renaming…");
   const exist=await ghGet(newName); if(exist && !confirm(`"${newName}" already exists. Replace it?`)) return false;
   const old=await ghGet(g.file); if(!old){ alert("Original not found."); return false; }
+  // Never rename from an empty read — the copy would be an empty file.
+  if(!old.text){ alert("Couldn't download this guide, so it wasn't renamed.\n\n(tried: "+((old.tried&&old.tried.join(", "))||"none")+")"); return false; }
   const html=old.text.replace(/("file":")[^"]*(")/, `$1${newName}$2`);
   await ghPut(newName, html, exist?exist.sha:null, `Rename ${g.file} → ${newName}`);
   await ghDelete(g.file, old.sha, `Rename: remove ${g.file}`);
@@ -397,6 +430,8 @@ async function renameGuide(g){
 async function toggleUnlisted(g){
   status("Updating…");
   const f=await ghGet(g.file); if(!f){ alert("Not found."); return false; }
+  // Never rewrite a guide from an empty read — that would wipe the live file.
+  if(!f.text){ alert("Couldn't download this guide, so nothing was changed.\n\n(tried: "+((f.tried&&f.tried.join(", "))||"none")+")"); return false; }
   let html=f.text; const isUnlisted=/<meta name="stepsnap-unlisted" content="1">/.test(html);
   html = isUnlisted
     ? html.replace(/\s*<meta name="stepsnap-unlisted" content="1">/,"")
@@ -712,9 +747,22 @@ async function edOpen(pathOrFile, isDraft){
   try{
     const f=await ghGet(pathOrFile);
     if(!f){ alert("Couldn't find that file on the site."); return; }
+    if(!f.text){
+      alert("Couldn't download the guide's contents.\n\n(admin build "+ADMIN_BUILD+
+            " — methods tried: "+((f.tried&&f.tried.join(", "))||"none")+")\n\n"+
+            "Please send this exact message to Claude Code.");
+      return;
+    }
     const doc=new DOMParser().parseFromString(f.text,"text/html");
     const el=doc.getElementById("stepsnap-data");
-    if(!el){ alert("This guide has no editable data embedded (it may be an older export), so it can't be edited here yet.\n\nOpen it in the extension instead."); return; }
+    if(!el){
+      alert("Downloaded the guide ("+f.text.length.toLocaleString()+" characters via "+f.via+
+            ", admin build "+ADMIN_BUILD+") but it has no editable data block — it was "+
+            "probably exported before round-trip editing existed (v2.0).\n\n"+
+            "Open it in the extension once (My guides → 🌐 Open a published guide…), "+
+            "re-publish it, and it'll be editable here from then on.");
+      return;
+    }
     const p=JSON.parse(el.textContent);
     ED={ file:(p.file || (isDraft?null:pathOrFile)), draftPath:(isDraft?pathOrFile:null),
       title:p.title||"", desc:p.desc||"", author:p.author||"", unlisted:!!p.unlisted,
@@ -792,6 +840,7 @@ $("edAddChapter").onclick=()=>{ if(!ED) return; ED.steps.push(edBlank("chapter",
 
 /* ===== gate (setup / login) ===== */
 function showGate(){
+  $("gateBuild").textContent = "admin build " + ADMIN_BUILD;
   const saved = JSON.parse(localStorage.getItem(LS_KEY) || "null");
   $("app").classList.add("hidden"); $("gate").classList.remove("hidden");
   if(saved && saved.enc){ REPO=saved.repo||REPO; $("login").classList.remove("hidden"); $("setup").classList.add("hidden"); $("liPass").focus(); }
