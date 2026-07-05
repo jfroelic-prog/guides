@@ -259,7 +259,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-07-04f"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-07-04g"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -933,11 +933,16 @@ function edCard(s,i,badge){
       if(colorPre && selT){ edUndoStack.push(colorPre); if(edUndoStack.length>30) edUndoStack.shift(); updateUndoBtn(); }
       colorPre=null;
     };
+    // undo lives on every step's tool bar too (same global undo as the top bar —
+    // users look for it next to the tools they just used)
+    const undoB=document.createElement("button"); undoB.className="modebtn"; undoB.textContent="↩ Undo";
+    undoB.title="Undo the last edit (Cmd/Ctrl+Z)";
+    undoB.onclick=()=>undo();
     const rm=document.createElement("button"); rm.className="ibtn danger"; rm.textContent="🖼✕"; rm.title="Remove screenshot"; rm.style.width="auto"; rm.style.padding="0 8px";
     rm.onclick=()=>{ if(confirm("Remove this screenshot?")){ snap(); s.img=null; edRender(); } };
     const hint=document.createElement("span"); hint.className="hint";
     hint.textContent=HINT_DEFAULT;
-    st.append(addC,addB,blurBtn,colorInp,rm,hint);
+    st.append(addC,addB,blurBtn,colorInp,undoB,rm,hint);
     el.append(st);
   } else if(s.type!=="chapter" && !calloutIcon[s.type] && s.type!=="nav"){
     const no=document.createElement("div"); no.className="noshot note";
