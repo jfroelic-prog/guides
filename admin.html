@@ -98,15 +98,21 @@
   .ibtn:hover{ border-color:var(--gold); } .ibtn.danger{ color:var(--accent); border-color:#e7c7c2; }
   .shotwrap{ position:relative; margin:0 15px 12px; }
   .shotwrap img{ display:block; width:100%; border-radius:8px; border:1px solid var(--line); }
-  /* click targets: any number per step, each its own colour + shape */
-  .shotwrap .tgt{ position:absolute; border:3px solid #f97316; cursor:pointer; }
+  /* click targets: any number per step, each its own colour + shape.
+     Drag one to move it; hover/select shows its ✕. Selection = soft halo. */
+  .shotwrap .tgt{ position:absolute; border:3px solid #f97316; cursor:move; }
   .shotwrap .tgt.circle{ transform:translate(-50%,-50%); border-radius:50%; aspect-ratio:1; }
   .shotwrap .tgt.box{ border-radius:6px; }
-  .shotwrap .tgt.sel{ box-shadow:0 0 0 2px #fff, 0 0 0 4px #211d17; }
+  .shotwrap .tgt.sel{ box-shadow:0 0 10px 1px rgba(33,29,23,.45); }
+  .shotwrap .tgt .tx{ position:absolute; top:-11px; right:-11px; width:20px; height:20px;
+    border-radius:50%; border:0; background:#211d17; color:#fff; font-size:11px; line-height:20px;
+    padding:0; cursor:pointer; display:none; box-shadow:0 1px 4px rgba(0,0,0,.35); }
+  .shotwrap .tgt.circle .tx{ top:-8px; right:auto; left:calc(100% - 12px); }
+  .shotwrap .tgt:hover .tx, .shotwrap .tgt.sel .tx{ display:block; }
   .shotwrap.aim{ cursor:crosshair; }
   .shot-tools input[type=color]{ width:30px; height:26px; padding:1px; border:1px solid var(--line);
     border-radius:6px; background:var(--card); cursor:pointer; }
-  .shot-tools .dis{ opacity:.35; pointer-events:none; }
+  .dis{ opacity:.35; pointer-events:none; }
   .shot-tools{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:0 15px 14px; font-size:12.5px; color:var(--muted); }
   .shot-tools label{ display:flex; align-items:center; gap:5px; } .shot-tools input[type=checkbox]{ width:auto; }
   .shot-tools input[type=range]{ width:120px; padding:0; }
@@ -218,6 +224,7 @@
     <span class="sp"></span>
     <span class="saved" id="edStatus"></span>
     <button class="btn tiny" id="edBack">← Back to admin</button>
+    <button class="btn tiny" id="edUndoBtn" title="Undo the last edit (Cmd/Ctrl+Z)">↩ Undo</button>
     <button class="btn tiny" id="gifBtn" title="Combine step screenshots into a looping animation">🎞 GIF</button>
     <button class="btn primary tiny" id="edPublish">🚀 Publish</button>
   </div>
@@ -248,7 +255,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-07-04d"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-07-04e"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -542,6 +549,39 @@ function edSlug(t){ return ((t||"guide").toLowerCase().replace(/[^a-z0-9]+/g,"-"
 function edUid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function edBlank(type,title){ return { id:edUid(), type, title, desc:"", img:null, hx:.5, hy:.5, hr:.045, showHl:false, blurs:[], targets:[] }; }
 function edStatus(t){ $("edStatus").textContent=t||""; }
+
+/* --- undo (last edits) --- */
+let edUndoStack = []; // snapshots of ED.steps, newest last (max 30)
+
+// Clone only the MUTABLE parts of the steps. Strings (screenshots, titles)
+// ride along by reference, so snapshots stay tiny even on 8MB guides.
+function cloneSteps(steps){
+  return steps.map(s=>({ ...s,
+    blurs:(s.blurs||[]).map(b=>({...b})),
+    targets:(s.targets||[]).map(t=>({...t})) }));
+}
+// Call BEFORE a structural edit (targets/blurs/steps/screenshots). Typing in
+// title/description fields is NOT snapshotted — those have the browser's own
+// per-field undo (Cmd/Ctrl+Z inside the field).
+function snap(){
+  if(!ED) return;
+  edUndoStack.push(cloneSteps(ED.steps));
+  if(edUndoStack.length>30) edUndoStack.shift();
+  updateUndoBtn();
+}
+function undo(){
+  if(!ED || !edUndoStack.length){ edStatus("Nothing to undo"); return; }
+  ED.steps = edUndoStack.pop();
+  updateUndoBtn(); edRender(); edStatus("Undid last change ↩");
+}
+function updateUndoBtn(){ $("edUndoBtn").classList.toggle("dis", !edUndoStack.length); }
+window.addEventListener("keydown",(e)=>{
+  if(!(e.metaKey||e.ctrlKey) || e.shiftKey || (e.key||"").toLowerCase()!=="z") return;
+  if(!ED || $("editor").classList.contains("hidden")) return;
+  const t=e.target, tag=(t&&t.tagName||"").toLowerCase();
+  if(tag==="input"||tag==="textarea"||(t&&t.isContentEditable)) return; // native text undo
+  e.preventDefault(); undo();
+});
 function linkify(raw){
   raw=(raw||"").replace(/<((?:https?:\/\/)[^>\s]+)>/g,"$1");
   const re=/(https?:\/\/[^\s<>"')\]]+)/g; let out="",last=0,m;
@@ -631,13 +671,13 @@ function edReplaceImage(s){
   inp.onchange=()=>{
     const f=inp.files[0]; if(!f) return;
     const r=new FileReader();
-    r.onload=()=>{ s.img=r.result; s.showHl=false; edRender(); };
+    r.onload=()=>{ snap(); s.img=r.result; s.showHl=false; edRender(); };
     r.readAsDataURL(f);
   };
   inp.click();
 }
 function edGrow(t){ t.style.height="auto"; t.style.height=t.scrollHeight+"px"; }
-function edMove(i,dir){ const j=i+dir; if(j<0||j>=ED.steps.length) return; [ED.steps[i],ED.steps[j]]=[ED.steps[j],ED.steps[i]]; edRender(); }
+function edMove(i,dir){ const j=i+dir; if(j<0||j>=ED.steps.length) return; snap(); [ED.steps[i],ED.steps[j]]=[ED.steps[j],ED.steps[i]]; edRender(); }
 function edIbtn(txt,title,fn,danger){ const b=document.createElement("button"); b.className="ibtn"+(danger?" danger":""); b.textContent=txt; b.title=title; b.onclick=fn; return b; }
 
 function edRender(){
@@ -680,16 +720,16 @@ function edCard(s,i,badge){
     const cur=(s.type==="chapter"||calloutIcon[s.type])?s.type:"click";
     [["click","● Step"],["chapter","📖 Chapter"],["tip","💡 Tip"],["alert","⚠️ Alert"],["warning","🔔 Warning"]]
       .forEach(([v,l])=>{ const o=document.createElement("option"); o.value=v; o.textContent=l; if(v===cur)o.selected=true; sel.append(o); });
-    sel.onchange=()=>{ s.type=sel.value; edRender(); };
+    sel.onchange=()=>{ snap(); s.type=sel.value; edRender(); };
     tools.append(sel);
   }
   tools.append(
     edIbtn("↑","Move up",()=>edMove(i,-1)),
     edIbtn("↓","Move down",()=>edMove(i,1)),
     edIbtn("📷","Add or replace the screenshot with an image file",()=>edReplaceImage(s)),
-    edIbtn("⧉","Duplicate",()=>{ ED.steps.splice(i+1,0,{ ...s, id:edUid(),
+    edIbtn("⧉","Duplicate",()=>{ snap(); ED.steps.splice(i+1,0,{ ...s, id:edUid(),
       blurs:(s.blurs||[]).map(b=>({...b})), targets:(s.targets||[]).map(t=>({...t})) }); edRender(); }),
-    edIbtn("✕","Delete",()=>{ if(confirm("Delete this step?")){ ED.steps.splice(i,1); edRender(); } },true)
+    edIbtn("✕","Delete",()=>{ if(confirm("Delete this step?")){ snap(); ED.steps.splice(i,1); edRender(); } },true)
   );
   head.append(selWrap,num,fields,tools); el.append(head);
 
@@ -704,14 +744,48 @@ function edCard(s,i,badge){
     const wrap=document.createElement("div"); wrap.className="shotwrap aim";
     const img=document.createElement("img"); img.src=s.img; img.draggable=false; wrap.append(img);
 
-    /* click targets (any number; click one to select it) */
+    /* click targets — drag one to move it, its ✕ deletes it, a click selects */
     const tgtEls=[];
     s.targets.forEach((t,ti)=>{
       const tg=document.createElement("div");
       tg.className="tgt "+(t.shape==="box"?"box":"circle")+(ti===sel?" sel":"");
       positionTgt(tg,t);
-      tg.title="Click to select this target";
-      tg.onclick=(e)=>{ e.stopPropagation(); edSel[s.id]=ti; edRender(); };
+      tg.title="Drag to move · ✕ deletes";
+      const tx=document.createElement("button"); tx.className="tx"; tx.textContent="✕";
+      tx.title="Delete this target";
+      tx.onmousedown=(e)=>e.stopPropagation();
+      tx.onclick=(e)=>{ e.stopPropagation(); snap(); s.targets.splice(ti,1);
+        edSel[s.id]=Math.min(ti, s.targets.length-1); syncLegacy(s); edRender(); };
+      tg.append(tx);
+      tg.onmousedown=(e)=>{
+        if(e.button!==0) return;
+        e.preventDefault(); e.stopPropagation();
+        const r=wrap.getBoundingClientRect();
+        const px=(e.clientX-r.left)/r.width, py=(e.clientY-r.top)/r.height;
+        const off={ x:px-t.x, y:py-t.y }; // grab offset so the target doesn't jump
+        const pre=cloneSteps(ED.steps); let moved=false;
+        const mm=(ev)=>{
+          const cx=(ev.clientX-r.left)/r.width, cy=(ev.clientY-r.top)/r.height;
+          if(!moved && Math.abs(cx-px)<0.004 && Math.abs(cy-py)<0.004) return; // still a click
+          moved=true;
+          if(t.shape==="box"){
+            t.x=Math.max(0, Math.min(1-t.w, cx-off.x));
+            t.y=Math.max(0, Math.min(1-t.h, cy-off.y));
+          } else {
+            t.x=Math.max(0, Math.min(1, cx-off.x));
+            t.y=Math.max(0, Math.min(1, cy-off.y));
+          }
+          positionTgt(tg,t);
+        };
+        const mu=()=>{
+          window.removeEventListener("mousemove",mm); window.removeEventListener("mouseup",mu);
+          if(moved){
+            edUndoStack.push(pre); if(edUndoStack.length>30) edUndoStack.shift(); updateUndoBtn();
+            edSel[s.id]=ti; syncLegacy(s); edRender();
+          } else if(edSel[s.id]!==ti){ edSel[s.id]=ti; edRender(); }
+        };
+        window.addEventListener("mousemove",mm); window.addEventListener("mouseup",mu);
+      };
       tgtEls.push(tg); wrap.append(tg);
     });
 
@@ -721,7 +795,7 @@ function edCard(s,i,badge){
       box.style.left=b.x*100+"%"; box.style.top=b.y*100+"%";
       box.style.width=b.w*100+"%"; box.style.height=b.h*100+"%";
       const rmb=document.createElement("button"); rmb.className="rmblur"; rmb.textContent="✕"; rmb.title="Remove this blur";
-      rmb.onclick=(e)=>{ e.stopPropagation(); s.blurs.splice(bi,1); edRender(); };
+      rmb.onclick=(e)=>{ e.stopPropagation(); snap(); s.blurs.splice(bi,1); edRender(); };
       box.append(rmb); wrap.append(box);
     });
 
@@ -747,6 +821,7 @@ function edCard(s,i,badge){
       if(!drag) return;
       const c=drag.cur; drag.box.remove(); drag=null;
       if(c && c.w>0.01 && c.h>0.01){
+        snap();
         if(boxMode){
           s.targets.push({ shape:"box", ...clampBox(c), color:edColor });
           edSel[s.id]=s.targets.length-1;
@@ -759,11 +834,12 @@ function edCard(s,i,badge){
     };
     wrap.onmouseup=endDrag; wrap.onmouseleave=endDrag;
 
-    wrap.title="Click a target to select it · click the image to move the selected target";
+    wrap.title="Drag a target to move it · click empty image to place the selected one";
     wrap.onclick=(e)=>{
       if(blurMode || boxMode || e.target.classList.contains("rmblur")) return;
       const r=wrap.getBoundingClientRect();
       const cx=(e.clientX-r.left)/r.width, cy=(e.clientY-r.top)/r.height;
+      snap();
       if(!s.targets.length){
         // first click on a bare screenshot drops a circle right there (old habit)
         s.targets.push({ shape:"circle", x:cx, y:cy, r:.045, color:edColor });
@@ -780,22 +856,23 @@ function edCard(s,i,badge){
     el.append(wrap);
 
     const st=document.createElement("div"); st.className="shot-tools";
-    // add a circle target immediately (then click the image to place it)
-    const addC=document.createElement("button"); addC.className="modebtn"; addC.textContent="🎯 + circle";
-    addC.title="Add a circle target (then click the image to move it)";
+    const HINT_DEFAULT="drag a target to move it · hover one for its ✕";
+    // add a circle target immediately (drag it where you want it)
+    const addC=document.createElement("button"); addC.className="modebtn"; addC.textContent="🎯 Add circle";
+    addC.title="Add a circle target, then drag it into place";
     addC.onclick=()=>{
+      snap();
       s.targets.push({ shape:"circle", x:.5, y:.5, r:.045, color:edColor });
       edSel[s.id]=s.targets.length-1; syncLegacy(s); edRender();
     };
     // draw a box target by dragging
-    const addB=document.createElement("button"); addB.className="modebtn"; addB.textContent="▭ + box";
+    const addB=document.createElement("button"); addB.className="modebtn"; addB.textContent="▭ Draw box";
     addB.title="Draw a box target: click this, then drag on the image";
     addB.onclick=()=>{
       boxMode=!boxMode; if(boxMode){ blurMode=false; blurBtn.classList.remove("on"); }
       addB.classList.toggle("on",boxMode);
       wrap.classList.toggle("blurmode",boxMode||blurMode);
-      hint.textContent = boxMode ? "drag on the image to draw the box target"
-                                 : "click a target to select · click the image to move it";
+      hint.textContent = boxMode ? "now drag on the image to draw the box" : HINT_DEFAULT;
     };
     const blurBtn=document.createElement("button"); blurBtn.className="modebtn"; blurBtn.textContent="🌫 Blur";
     blurBtn.title="Toggle blur mode, then drag boxes over anything sensitive";
@@ -805,35 +882,41 @@ function edCard(s,i,badge){
       wrap.classList.toggle("blurmode",blurMode||boxMode);
       hint.textContent = blurMode
         ? "drag on the image to blur an area · ✕ removes a blur"
-        : "click a target to select · click the image to move it";
+        : HINT_DEFAULT;
     };
     // colour of the selected target (and the default for new ones)
     const colorInp=document.createElement("input"); colorInp.type="color";
     colorInp.value=(selT && selT.color) || edColor;
-    colorInp.title="Target colour (applies to the selected target and new ones)";
+    colorInp.title="Colour for the selected target (and new ones)";
+    let colorPre=null;
+    colorInp.onpointerdown=()=>{ colorPre = ED ? cloneSteps(ED.steps) : null; };
     colorInp.oninput=()=>{
       edColor=colorInp.value;
       if(selT){ selT.color=edColor; const n=tgtEls[sel]; if(n) n.style.borderColor=edColor; }
     };
-    // size slider — circles only (redraw a box to resize it)
+    colorInp.onchange=()=>{  // one undo entry per colour pick, not per shade dragged
+      if(colorPre && selT){ edUndoStack.push(colorPre); if(edUndoStack.length>30) edUndoStack.shift(); updateUndoBtn(); }
+      colorPre=null;
+    };
+    // size slider — circles only (draw a new box to resize a box)
     const sizeLbl=document.createElement("label");
     const range=document.createElement("input"); range.type="range"; range.min=2; range.max=15; range.step=0.5;
     range.value=(selT && selT.shape!=="box" ? (selT.r||0.045) : 0.045)*100;
+    let sizePre=null;
+    range.onpointerdown=()=>{ sizePre = ED ? cloneSteps(ED.steps) : null; };
     range.oninput=()=>{ if(!selT||selT.shape==="box") return; selT.r=range.value/100;
       const n=tgtEls[sel]; if(n) positionTgt(n,selT); syncLegacy(s); };
+    range.onchange=()=>{  // one undo entry per slider gesture
+      if(sizePre && selT && selT.shape!=="box"){ edUndoStack.push(sizePre); if(edUndoStack.length>30) edUndoStack.shift(); updateUndoBtn(); }
+      sizePre=null;
+    };
     sizeLbl.append(document.createTextNode("size "), range);
     if(!selT || selT.shape==="box") sizeLbl.className="dis";
-    // remove the selected target
-    const delT=document.createElement("button"); delT.className="ibtn danger"; delT.textContent="🎯✕";
-    delT.title="Remove the selected target"; delT.style.width="auto"; delT.style.padding="0 8px";
-    if(!selT) delT.classList.add("dis");
-    delT.onclick=()=>{ if(sel<0) return; s.targets.splice(sel,1);
-      edSel[s.id]=Math.min(sel, s.targets.length-1); syncLegacy(s); edRender(); };
     const rm=document.createElement("button"); rm.className="ibtn danger"; rm.textContent="🖼✕"; rm.title="Remove screenshot"; rm.style.width="auto"; rm.style.padding="0 8px";
-    rm.onclick=()=>{ if(confirm("Remove this screenshot?")){ s.img=null; edRender(); } };
+    rm.onclick=()=>{ if(confirm("Remove this screenshot?")){ snap(); s.img=null; edRender(); } };
     const hint=document.createElement("span"); hint.className="hint";
-    hint.textContent="click a target to select · click the image to move it";
-    st.append(addC,addB,blurBtn,colorInp,sizeLbl,delT,rm,hint);
+    hint.textContent=HINT_DEFAULT;
+    st.append(addC,addB,blurBtn,colorInp,sizeLbl,rm,hint);
     el.append(st);
   } else if(s.type!=="chapter" && !calloutIcon[s.type] && s.type!=="nav"){
     const no=document.createElement("div"); no.className="noshot note";
@@ -845,7 +928,7 @@ function edCard(s,i,badge){
   el.ondragstart=(e)=>{ e.dataTransfer.setData("text/plain",i); el.style.opacity=".5"; };
   el.ondragend=()=>{ el.style.opacity=""; el.draggable=false; };
   el.ondragover=(e)=>{ e.preventDefault(); };
-  el.ondrop=(e)=>{ e.preventDefault(); const from=+e.dataTransfer.getData("text/plain"); if(isNaN(from)||from===i) return; const [m]=ED.steps.splice(from,1); ED.steps.splice(i,0,m); edRender(); };
+  el.ondrop=(e)=>{ e.preventDefault(); const from=+e.dataTransfer.getData("text/plain"); if(isNaN(from)||from===i) return; snap(); const [m]=ED.steps.splice(from,1); ED.steps.splice(i,0,m); edRender(); };
   return el;
 }
 
@@ -1034,8 +1117,9 @@ $("gifCreate").onclick=async()=>{
     // 1) download the .gif  2) insert it as a new step so it lives in the guide
     edDownload(edSlug(ED.title)+"-animation.gif","image/gif",bytes);
     const gifUrl=await bytesToDataUrl(bytes,"image/gif");
+    snap();
     ED.steps.push({ id:edUid(), type:"note", title:"Animated overview", desc:"",
-                    img:gifUrl, hx:.5, hy:.5, hr:.045, showHl:false, blurs:[] });
+                    img:gifUrl, hx:.5, hy:.5, hr:.045, showHl:false, blurs:[], targets:[] });
     exitGifMode(); edRender();
     edStatus("GIF created ✓ (downloaded + added as a step)");
     window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"});
@@ -1063,12 +1147,13 @@ function edDownload(name,mime,content){
 /* --- open / publish / navigate --- */
 function showEditor(where){
   exitGifMode();
+  edUndoStack=[]; updateUndoBtn();
   $("app").classList.add("hidden"); $("editor").classList.remove("hidden");
   $("edWhere").textContent=where||"";
   $("edTitle").value=ED.title; $("edDesc").value=ED.desc; $("edAuthor").value=ED.author; $("edUnlisted").checked=!!ED.unlisted;
   edStatus(""); edRender(); window.scrollTo(0,0);
 }
-function showApp(){ exitGifMode(); $("editor").classList.add("hidden"); $("app").classList.remove("hidden"); ED=null; window.scrollTo(0,0); }
+function showApp(){ exitGifMode(); edUndoStack=[]; $("editor").classList.add("hidden"); $("app").classList.remove("hidden"); ED=null; window.scrollTo(0,0); }
 
 async function edOpen(pathOrFile, isDraft){
   status("Opening editor…");
@@ -1166,9 +1251,10 @@ $("edDesc").oninput=e=>{ if(ED) ED.desc=e.target.value; };
 $("edAuthor").oninput=e=>{ if(ED) ED.author=e.target.value; };
 $("edUnlisted").onchange=e=>{ if(ED) ED.unlisted=e.target.checked; };
 $("edBack").onclick=()=>{ if(confirm("Leave the editor? Any changes you haven't published are discarded.")) showApp(); };
+$("edUndoBtn").onclick=undo;
 $("edPublish").onclick=edPublish;
-$("edAddStep").onclick=()=>{ if(!ED) return; ED.steps.push(edBlank("note","New step")); edRender(); window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"}); };
-$("edAddChapter").onclick=()=>{ if(!ED) return; ED.steps.push(edBlank("chapter","New chapter")); edRender(); window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"}); };
+$("edAddStep").onclick=()=>{ if(!ED) return; snap(); ED.steps.push(edBlank("note","New step")); edRender(); window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"}); };
+$("edAddChapter").onclick=()=>{ if(!ED) return; snap(); ED.steps.push(edBlank("chapter","New chapter")); edRender(); window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"}); };
 
 /* ===== gate (setup / login) ===== */
 function showGate(){
