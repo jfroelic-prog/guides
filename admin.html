@@ -36,7 +36,7 @@
   #gate .btn{ margin-top:16px; } .err{ color:var(--accent); font-size:13px; margin-top:10px; min-height:18px; }
 
   /* topbar */
-  .top{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+  .top{ display:flex; align-items:center; gap:10px; margin-bottom:6px; flex-wrap:wrap; }
   .top .sp{ flex:1; }
   .sub{ color:var(--muted); margin:0 0 8px; font-size:13px; }
 
@@ -109,6 +109,10 @@
     padding:0; cursor:pointer; display:none; box-shadow:0 1px 4px rgba(0,0,0,.35); }
   .shotwrap .tgt.circle .tx{ top:-8px; right:auto; left:calc(100% - 12px); }
   .shotwrap .tgt:hover .tx, .shotwrap .tgt.sel .tx{ display:block; }
+  /* corner resize handle on the selected target */
+  .shotwrap .tgt .rz{ position:absolute; right:-8px; bottom:-8px; width:14px; height:14px;
+    background:#fff; border:2px solid #211d17; border-radius:4px; cursor:nwse-resize; display:none; }
+  .shotwrap .tgt.sel .rz{ display:block; }
   .shotwrap.aim{ cursor:crosshair; }
   .shot-tools input[type=color]{ width:30px; height:26px; padding:1px; border:1px solid var(--line);
     border-radius:6px; background:var(--card); cursor:pointer; }
@@ -255,7 +259,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-07-04e"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-07-04f"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -574,7 +578,9 @@ function undo(){
   ED.steps = edUndoStack.pop();
   updateUndoBtn(); edRender(); edStatus("Undid last change ↩");
 }
-function updateUndoBtn(){ $("edUndoBtn").classList.toggle("dis", !edUndoStack.length); }
+// The Undo button stays fully visible even with nothing to undo — dimming it
+// made it look missing (user feedback); an empty stack answers "Nothing to undo".
+function updateUndoBtn(){}
 window.addEventListener("keydown",(e)=>{
   if(!(e.metaKey||e.ctrlKey) || e.shiftKey || (e.key||"").toLowerCase()!=="z") return;
   if(!ED || $("editor").classList.contains("hidden")) return;
@@ -757,6 +763,35 @@ function edCard(s,i,badge){
       tx.onclick=(e)=>{ e.stopPropagation(); snap(); s.targets.splice(ti,1);
         edSel[s.id]=Math.min(ti, s.targets.length-1); syncLegacy(s); edRender(); };
       tg.append(tx);
+      if(ti===sel){
+        // corner handle: drag to resize (circle = radius, box = width/height)
+        const rz=document.createElement("div"); rz.className="rz"; rz.title="Drag to resize";
+        rz.onmousedown=(e)=>{
+          e.preventDefault(); e.stopPropagation();
+          const r=wrap.getBoundingClientRect();
+          const pre=cloneSteps(ED.steps); let changed=false;
+          const mm=(ev)=>{
+            const cx=(ev.clientX-r.left)/r.width, cy=(ev.clientY-r.top)/r.height;
+            changed=true;
+            if(t.shape==="box"){
+              t.w=Math.max(0.02, Math.min(1-t.x, cx-t.x));
+              t.h=Math.max(0.02, Math.min(1-t.y, cy-t.y));
+            } else {
+              // t.r is a fraction of the image WIDTH; convert dy into width units
+              const dx=cx-t.x, dy=(cy-t.y)*(r.height/r.width);
+              t.r=Math.max(0.01, Math.min(0.5, Math.hypot(dx,dy)));
+            }
+            positionTgt(tg,t);
+          };
+          const mu=()=>{
+            window.removeEventListener("mousemove",mm); window.removeEventListener("mouseup",mu);
+            if(changed){ edUndoStack.push(pre); if(edUndoStack.length>30) edUndoStack.shift(); updateUndoBtn();
+              syncLegacy(s); edRender(); }
+          };
+          window.addEventListener("mousemove",mm); window.addEventListener("mouseup",mu);
+        };
+        tg.append(rz);
+      }
       tg.onmousedown=(e)=>{
         if(e.button!==0) return;
         e.preventDefault(); e.stopPropagation();
@@ -856,7 +891,7 @@ function edCard(s,i,badge){
     el.append(wrap);
 
     const st=document.createElement("div"); st.className="shot-tools";
-    const HINT_DEFAULT="drag a target to move it · hover one for its ✕";
+    const HINT_DEFAULT="drag a target to move it · corner handle resizes · ✕ deletes";
     // add a circle target immediately (drag it where you want it)
     const addC=document.createElement("button"); addC.className="modebtn"; addC.textContent="🎯 Add circle";
     addC.title="Add a circle target, then drag it into place";
@@ -898,25 +933,11 @@ function edCard(s,i,badge){
       if(colorPre && selT){ edUndoStack.push(colorPre); if(edUndoStack.length>30) edUndoStack.shift(); updateUndoBtn(); }
       colorPre=null;
     };
-    // size slider — circles only (draw a new box to resize a box)
-    const sizeLbl=document.createElement("label");
-    const range=document.createElement("input"); range.type="range"; range.min=2; range.max=15; range.step=0.5;
-    range.value=(selT && selT.shape!=="box" ? (selT.r||0.045) : 0.045)*100;
-    let sizePre=null;
-    range.onpointerdown=()=>{ sizePre = ED ? cloneSteps(ED.steps) : null; };
-    range.oninput=()=>{ if(!selT||selT.shape==="box") return; selT.r=range.value/100;
-      const n=tgtEls[sel]; if(n) positionTgt(n,selT); syncLegacy(s); };
-    range.onchange=()=>{  // one undo entry per slider gesture
-      if(sizePre && selT && selT.shape!=="box"){ edUndoStack.push(sizePre); if(edUndoStack.length>30) edUndoStack.shift(); updateUndoBtn(); }
-      sizePre=null;
-    };
-    sizeLbl.append(document.createTextNode("size "), range);
-    if(!selT || selT.shape==="box") sizeLbl.className="dis";
     const rm=document.createElement("button"); rm.className="ibtn danger"; rm.textContent="🖼✕"; rm.title="Remove screenshot"; rm.style.width="auto"; rm.style.padding="0 8px";
     rm.onclick=()=>{ if(confirm("Remove this screenshot?")){ snap(); s.img=null; edRender(); } };
     const hint=document.createElement("span"); hint.className="hint";
     hint.textContent=HINT_DEFAULT;
-    st.append(addC,addB,blurBtn,colorInp,sizeLbl,rm,hint);
+    st.append(addC,addB,blurBtn,colorInp,rm,hint);
     el.append(st);
   } else if(s.type!=="chapter" && !calloutIcon[s.type] && s.type!=="nav"){
     const no=document.createElement("div"); no.className="noshot note";
