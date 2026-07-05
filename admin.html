@@ -229,6 +229,8 @@
     <span class="saved" id="edStatus"></span>
     <button class="btn tiny" id="edBack">← Back to admin</button>
     <button class="btn tiny" id="edUndoBtn" title="Undo the last edit (Cmd/Ctrl+Z)">↩ Undo</button>
+    <button class="btn tiny" id="edCopyBtn" title="Copy the whole guide — paste into Gmail, Google Docs, or Word">📋 Copy guide</button>
+    <button class="btn tiny" id="edMdBtn" title="Download the guide as a Markdown file">⬇ Markdown</button>
     <button class="btn tiny" id="gifBtn" title="Combine step screenshots into a looping animation">🎞 GIF</button>
     <button class="btn primary tiny" id="edPublish">🚀 Publish</button>
   </div>
@@ -259,7 +261,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-07-04g"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-07-05a"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -1038,6 +1040,7 @@ ${toc}
 <a class="home" href="./" id="homeLink">⌂ All guides</a>
 <button class="home" id="copyLinkBtn" type="button">🔗 Copy link</button>
 <a class="home" id="openTab" target="_blank" rel="noopener">↗ Open in new tab</a>
+<button class="home" id="pdfBtn" type="button">⬇ PDF</button>
 <h1>${esc(meta.title)||"Untitled guide"}</h1>${meta.desc?`<p class="lead">${esc(meta.desc)}</p>`:""}
 ${meta.author?`<p class="byline">✍️ Made by ${esc(meta.author)}</p>`:""}
 ${body}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
@@ -1046,7 +1049,9 @@ ${body}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
 <script type="application/json" id="stepsnap-data">${dataJson}<\/script>
 <script>
 (function(){
-  // When viewed locally (file://) the share controls don't apply — hide them.
+  // Print/PDF works everywhere, even on a local file — wire it first.
+  var pdf=document.getElementById("pdfBtn"); if(pdf) pdf.onclick=function(){ window.print(); };
+  // When viewed locally (file://) the OTHER share controls don't apply — hide them.
   if(location.protocol==="file:"){
     ["homeLink","copyLinkBtn","openTab"].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display="none";});
     return;
@@ -1169,6 +1174,59 @@ function edDownload(name,mime,content){
   a.download=name; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),5000);
 }
+
+/* --- copy the whole guide to the clipboard (paste into Gmail/Docs/Word) --- */
+$("edCopyBtn").onclick=async()=>{
+  if(!ED) return;
+  edStatus("Preparing copy…");
+  const steps=ED.steps;
+  const imgs=await Promise.all(steps.map(flatten));
+  let n=0;
+  let html=`<h1>${esc(ED.title)||"Untitled guide"}</h1>`+(ED.desc?`<p>${esc(ED.desc)}</p>`:"");
+  let text=`${ED.title||"Untitled guide"}\n\n`;
+  steps.forEach((s,i)=>{
+    if(s.type==="chapter"){
+      n=0;
+      html+=`<h2>${linkify(s.title)}</h2>`+(s.desc?`<p>${linkifyML(s.desc)}</p>`:"");
+      text+=`\n${s.title}\n\n`;
+      return;
+    }
+    const label=s.type==="nav"?"→":(calloutIcon[s.type]||`${++n}.`);
+    html+=`<h3>${label} ${linkify(s.title)}</h3>`;
+    if(s.desc) html+=`<p>${linkifyML(s.desc)}</p>`;
+    if(imgs[i]) html+=`<p><img src="${imgs[i]}" style="max-width:620px;width:100%"></p>`;
+    text+=`${label} ${s.title}\n${s.desc?s.desc+"\n":""}\n`;
+  });
+  try{
+    await navigator.clipboard.write([new ClipboardItem({
+      "text/html": new Blob([html],{type:"text/html"}),
+      "text/plain": new Blob([text],{type:"text/plain"}),
+    })]);
+    edStatus("Copied ✓ — paste into a Doc or email");
+  }catch(e){
+    console.error(e);
+    edStatus("Copy failed — click anywhere on the page once, then try again");
+  }
+};
+
+/* --- download the guide as Markdown --- */
+$("edMdBtn").onclick=async()=>{
+  if(!ED) return;
+  edStatus("Building Markdown…");
+  const steps=ED.steps;
+  const imgs=await Promise.all(steps.map(flatten));
+  let n=0;
+  let md=`# ${ED.title||"Untitled guide"}\n\n${ED.desc?ED.desc+"\n\n":""}`;
+  steps.forEach((s,i)=>{
+    if(s.type==="chapter"){ n=0; md+=`## ${s.title}\n\n`; if(s.desc) md+=s.desc+"\n\n"; return; }
+    const label=s.type==="nav"?"→":(calloutIcon[s.type]||`${++n}.`);
+    md+=`### ${label} ${s.title}\n\n`;
+    if(s.desc) md+=s.desc+"\n\n";
+    if(imgs[i]) md+=`![Step screenshot](${imgs[i]})\n\n`;
+  });
+  edDownload(edSlug(ED.title)+".md","text/markdown",md);
+  edStatus("Markdown downloaded ⬇");
+};
 
 /* --- open / publish / navigate --- */
 function showEditor(where){
