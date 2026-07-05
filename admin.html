@@ -113,9 +113,23 @@
   .shotwrap .tgt .rz{ position:absolute; right:-8px; bottom:-8px; width:14px; height:14px;
     background:#fff; border:2px solid #211d17; border-radius:4px; cursor:nwse-resize; display:none; }
   .shotwrap .tgt.sel .rz{ display:block; }
+  /* arrows: the element IS the shaft (rotated line); .ah is the head; the
+     handle sits at the tip and drags it */
+  .shotwrap{ container-type:inline-size; }
+  .shotwrap .tgt.arrow{ border:none; height:0; border-top:3px solid; border-radius:0; }
+  .shotwrap .tgt.arrow .ah{ position:absolute; right:-2px; top:-7.5px; width:0; height:0;
+    border-top:6px solid transparent; border-bottom:6px solid transparent; border-left:12px solid; }
+  .shotwrap .tgt.arrow .tx{ left:-11px; right:auto; top:-12px; }
+  .shotwrap .tgt.arrow .rz{ right:-9px; bottom:auto; top:-8px; cursor:crosshair; }
+  .arrowpreview{ position:absolute; height:0; border-top:2.5px dashed var(--teal);
+    transform-origin:0 50%; pointer-events:none; }
+  /* labels: a colored text pill; font scales with the screenshot via cqw */
+  .shotwrap .tgt.label{ border:none; border-radius:.5em; color:#fff; padding:.32em .6em;
+    font:700 2.8cqw var(--font); line-height:1.25; white-space:pre-wrap; max-width:60%; cursor:move; }
   .shotwrap.aim{ cursor:crosshair; }
   .shot-tools input[type=color]{ width:30px; height:26px; padding:1px; border:1px solid var(--line);
     border-radius:6px; background:var(--card); cursor:pointer; }
+  .shot-tools .ltinp{ width:150px; padding:5px 8px; font-size:12.5px; }
   .dis{ opacity:.35; pointer-events:none; }
   .shot-tools{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:0 15px 14px; font-size:12.5px; color:var(--muted); }
   .shot-tools label{ display:flex; align-items:center; gap:5px; } .shot-tools input[type=checkbox]{ width:auto; }
@@ -261,7 +275,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-07-05a"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-07-05b"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -607,7 +621,13 @@ function linkifyML(raw){ return linkify(raw).replace(/\n/g,"<br>"); }
 // one-circle list here. KEEP FUNCTIONALLY IDENTICAL to extension/export.js.
 function targetsOf(s){
   if(Array.isArray(s.targets))
-    return s.targets.filter(t=>t && (t.shape==="box" ? t.w>0&&t.h>0 : true));
+    return s.targets.filter(t=>{
+      if(!t) return false;
+      if(t.shape==="box") return t.w>0&&t.h>0;
+      if(t.shape==="arrow") return [t.x1,t.y1,t.x2,t.y2].every(v=>typeof v==="number");
+      if(t.shape==="label") return !!(t.text&&String(t.text).trim());
+      return true;
+    });
   if(s.showHl)
     return [{ shape:"circle", x:(typeof s.hx==="number"?s.hx:0.5),
               y:(typeof s.hy==="number"?s.hy:0.5), r:(s.hr||0.045), color:"#f97316" }];
@@ -627,9 +647,38 @@ function flatten(s){ return new Promise(res=>{
       t.getContext("2d").drawImage(im,bx,by,bw,bh,0,0,t.width,t.height);
       x.imageSmoothingEnabled=false; x.drawImage(t,0,0,t.width,t.height,bx,by,bw,bh); x.imageSmoothingEnabled=true; } }
     for(const t of targets){
-      x.lineWidth=Math.max(4,im.width*0.004);
-      x.strokeStyle=t.color||"#f97316"; // default: orange, like Scribe
+      const lw=Math.max(4,im.width*0.004);
+      const col=t.color||"#f97316"; // default: orange, like Scribe
+      x.lineWidth=lw; x.strokeStyle=col; x.fillStyle=col;
       if(t.shape==="box"){ x.strokeRect(t.x*im.width, t.y*im.height, t.w*im.width, t.h*im.height); }
+      else if(t.shape==="arrow"){
+        const x1=t.x1*im.width, y1=t.y1*im.height, x2=t.x2*im.width, y2=t.y2*im.height;
+        const ang=Math.atan2(y2-y1,x2-x1);
+        const head=lw*3.2;
+        x.beginPath();
+        x.moveTo(x1,y1);
+        x.lineTo(x2-Math.cos(ang)*head*0.6, y2-Math.sin(ang)*head*0.6);
+        x.stroke();
+        x.beginPath();
+        x.moveTo(x2,y2);
+        x.lineTo(x2-Math.cos(ang-0.42)*head, y2-Math.sin(ang-0.42)*head);
+        x.lineTo(x2-Math.cos(ang+0.42)*head, y2-Math.sin(ang+0.42)*head);
+        x.closePath();
+        x.fill();
+      } else if(t.shape==="label"){
+        const fs=Math.max(12, im.width*0.028);
+        x.font=`bold ${fs}px "Century Gothic", CenturyGothic, "Trebuchet MS", sans-serif`;
+        const padX=fs*0.6, padY=fs*0.45;
+        const tw=x.measureText(t.text).width;
+        const lx=t.x*im.width, ly=t.y*im.height;
+        const bw=tw+padX*2, bh=fs+padY*2;
+        x.beginPath();
+        if(x.roundRect) x.roundRect(lx,ly,bw,bh,fs*0.35); else x.rect(lx,ly,bw,bh);
+        x.fill();
+        x.fillStyle="#ffffff";
+        x.textBaseline="middle";
+        x.fillText(t.text, lx+padX, ly+bh/2);
+      }
       else { x.beginPath(); x.arc(t.x*im.width, t.y*im.height, (t.r||0.045)*im.width, 0, Math.PI*2); x.stroke(); }
     }
     res(c.toDataURL("image/jpeg",0.85)); };
@@ -651,21 +700,37 @@ function reencodeForEmbed(dataUrl){ return new Promise(res=>{
 }); }
 
 /* --- editor UI --- */
-// Place a target overlay element over the screenshot.
+// Place a target overlay element over the screenshot. Arrows need real pixel
+// geometry (rotation), so their element must already be in the DOM.
 function positionTgt(el,t){
+  const col=t.color||"#f97316";
   if(t.shape==="box"){
     el.style.left=(t.x*100)+"%"; el.style.top=(t.y*100)+"%";
     el.style.width=(t.w*100)+"%"; el.style.height=(t.h*100)+"%";
+    el.style.borderColor=col;
+  } else if(t.shape==="arrow"){
+    const p=el.parentElement; if(!p) return;
+    const W=p.clientWidth, H=p.clientHeight;
+    const dx=(t.x2-t.x1)*W, dy=(t.y2-t.y1)*H;
+    el.style.left=(t.x1*100)+"%"; el.style.top=(t.y1*100)+"%";
+    el.style.width=Math.hypot(dx,dy)+"px";
+    el.style.transformOrigin="0 50%";
+    el.style.transform="rotate("+Math.atan2(dy,dx)+"rad)";
+    el.style.borderTopColor=col;
+    const ah=el.querySelector(".ah"); if(ah) ah.style.borderLeftColor=col;
+  } else if(t.shape==="label"){
+    el.style.left=(t.x*100)+"%"; el.style.top=(t.y*100)+"%";
+    el.style.background=col;
   } else {
     el.style.left=(t.x*100)+"%"; el.style.top=(t.y*100)+"%";
     el.style.width=((t.r||0.045)*200)+"%"; el.style.height="";
+    el.style.borderColor=col;
   }
-  el.style.borderColor=t.color||"#f97316";
 }
 // Keep the legacy single-highlight fields mirroring the first circle target, so
 // anything that still reads hx/hy/hr/showHl (e.g. old exports) stays sensible.
 function syncLegacy(s){
-  const c=(s.targets||[]).find(t=>t.shape!=="box");
+  const c=(s.targets||[]).find(t=>!t.shape||t.shape==="circle"); // circles only — arrows/labels have no hx/hy meaning
   if(c){ s.hx=c.x; s.hy=c.y; s.hr=c.r||0.045; s.showHl=true; }
   else s.showHl=false;
 }
@@ -755,19 +820,26 @@ function edCard(s,i,badge){
     /* click targets — drag one to move it, its ✕ deletes it, a click selects */
     const tgtEls=[];
     s.targets.forEach((t,ti)=>{
+      const shape=t.shape==="box"?"box":t.shape==="arrow"?"arrow":t.shape==="label"?"label":"circle";
       const tg=document.createElement("div");
-      tg.className="tgt "+(t.shape==="box"?"box":"circle")+(ti===sel?" sel":"");
-      positionTgt(tg,t);
+      tg.className="tgt "+shape+(ti===sel?" sel":"");
       tg.title="Drag to move · ✕ deletes";
+      if(shape==="label"){
+        const lt=document.createElement("span"); lt.className="lt"; lt.textContent=t.text||""; tg.append(lt);
+      }
+      if(shape==="arrow"){
+        const ah=document.createElement("div"); ah.className="ah"; tg.append(ah);
+      }
       const tx=document.createElement("button"); tx.className="tx"; tx.textContent="✕";
       tx.title="Delete this target";
       tx.onmousedown=(e)=>e.stopPropagation();
       tx.onclick=(e)=>{ e.stopPropagation(); snap(); s.targets.splice(ti,1);
         edSel[s.id]=Math.min(ti, s.targets.length-1); syncLegacy(s); edRender(); };
       tg.append(tx);
-      if(ti===sel){
-        // corner handle: drag to resize (circle = radius, box = width/height)
-        const rz=document.createElement("div"); rz.className="rz"; rz.title="Drag to resize";
+      if(ti===sel && shape!=="label"){
+        // corner handle: circle = radius, box = width/height, arrow = move the TIP
+        const rz=document.createElement("div"); rz.className="rz";
+        rz.title=shape==="arrow"?"Drag to move the arrow tip":"Drag to resize";
         rz.onmousedown=(e)=>{
           e.preventDefault(); e.stopPropagation();
           const r=wrap.getBoundingClientRect();
@@ -778,6 +850,9 @@ function edCard(s,i,badge){
             if(t.shape==="box"){
               t.w=Math.max(0.02, Math.min(1-t.x, cx-t.x));
               t.h=Math.max(0.02, Math.min(1-t.y, cy-t.y));
+            } else if(t.shape==="arrow"){
+              t.x2=Math.max(0, Math.min(1, cx));
+              t.y2=Math.max(0, Math.min(1, cy));
             } else {
               // t.r is a fraction of the image WIDTH; convert dy into width units
               const dx=cx-t.x, dy=(cy-t.y)*(r.height/r.width);
@@ -800,12 +875,19 @@ function edCard(s,i,badge){
         const r=wrap.getBoundingClientRect();
         const px=(e.clientX-r.left)/r.width, py=(e.clientY-r.top)/r.height;
         const off={ x:px-t.x, y:py-t.y }; // grab offset so the target doesn't jump
+        const a0=t.shape==="arrow"?{x1:t.x1,y1:t.y1,x2:t.x2,y2:t.y2}:null;
         const pre=cloneSteps(ED.steps); let moved=false;
         const mm=(ev)=>{
           const cx=(ev.clientX-r.left)/r.width, cy=(ev.clientY-r.top)/r.height;
           if(!moved && Math.abs(cx-px)<0.004 && Math.abs(cy-py)<0.004) return; // still a click
           moved=true;
-          if(t.shape==="box"){
+          if(t.shape==="arrow"){
+            // shift BOTH ends by the drag delta, kept inside the image
+            let dx=cx-px, dy=cy-py;
+            dx=Math.max(-Math.min(a0.x1,a0.x2), Math.min(1-Math.max(a0.x1,a0.x2), dx));
+            dy=Math.max(-Math.min(a0.y1,a0.y2), Math.min(1-Math.max(a0.y1,a0.y2), dy));
+            t.x1=a0.x1+dx; t.y1=a0.y1+dy; t.x2=a0.x2+dx; t.y2=a0.y2+dy;
+          } else if(t.shape==="box"){
             t.x=Math.max(0, Math.min(1-t.w, cx-off.x));
             t.y=Math.max(0, Math.min(1-t.h, cy-off.y));
           } else {
@@ -824,7 +906,13 @@ function edCard(s,i,badge){
         window.addEventListener("mousemove",mm); window.addEventListener("mouseup",mu);
       };
       tgtEls.push(tg); wrap.append(tg);
+      positionTgt(tg,t);
     });
+    // Arrows need REAL pixel geometry, which only exists once the card is in the
+    // document AND the screenshot has its final size — fix them up at both moments.
+    const fixArrows=()=>{ s.targets.forEach((t,ti)=>{ if(t.shape==="arrow"&&tgtEls[ti]) positionTgt(tgtEls[ti],t); }); };
+    requestAnimationFrame(fixArrows);
+    img.addEventListener("load", fixArrows);
 
     /* existing blur regions (baked into the picture on publish) */
     (s.blurs||[]).forEach((b,bi)=>{
@@ -836,19 +924,30 @@ function edCard(s,i,badge){
       box.append(rmb); wrap.append(box);
     });
 
-    /* drag modes: blur boxes and box-shaped targets share the same gesture */
-    let blurMode=false, boxMode=false, drag=null;
+    /* drag modes: blur boxes, box targets, and arrows all share the drag gesture */
+    let blurMode=false, boxMode=false, arrowMode=false, drag=null;
     wrap.onmousedown=(e)=>{
-      if((!blurMode && !boxMode) || e.target.classList.contains("rmblur")) return;
+      if((!blurMode && !boxMode && !arrowMode) || e.target.classList.contains("rmblur")) return;
       const r=wrap.getBoundingClientRect();
       drag={ x:(e.clientX-r.left)/r.width, y:(e.clientY-r.top)/r.height, r, box:document.createElement("div") };
-      drag.box.className="blurpreview";
+      drag.box.className=arrowMode?"arrowpreview":"blurpreview";
       if(boxMode) drag.box.style.borderColor=edColor;
+      if(arrowMode){
+        drag.box.style.borderTopColor=edColor;
+        drag.box.style.left=(drag.x*100)+"%"; drag.box.style.top=(drag.y*100)+"%";
+      }
       wrap.append(drag.box); e.preventDefault();
     };
     wrap.onmousemove=(e)=>{
       if(!drag) return;
       const cx=(e.clientX-drag.r.left)/drag.r.width, cy=(e.clientY-drag.r.top)/drag.r.height;
+      if(arrowMode){
+        const dxPx=(cx-drag.x)*drag.r.width, dyPx=(cy-drag.y)*drag.r.height;
+        drag.box.style.width=Math.hypot(dxPx,dyPx)+"px";
+        drag.box.style.transform="rotate("+Math.atan2(dyPx,dxPx)+"rad)";
+        drag.cur={ x1:drag.x, y1:drag.y, x2:cx, y2:cy };
+        return;
+      }
       const x=Math.min(drag.x,cx), y=Math.min(drag.y,cy);
       const w=Math.abs(cx-drag.x), h=Math.abs(cy-drag.y);
       Object.assign(drag.box.style,{ left:x*100+"%", top:y*100+"%", width:w*100+"%", height:h*100+"%" });
@@ -856,8 +955,20 @@ function edCard(s,i,badge){
     };
     const endDrag=()=>{
       if(!drag) return;
-      const c=drag.cur; drag.box.remove(); drag=null;
-      if(c && c.w>0.01 && c.h>0.01){
+      const c=drag.cur; const wasArrow=arrowMode; drag.box.remove(); drag=null;
+      if(!c) return;
+      if(wasArrow){
+        // ignore accidental micro-drags
+        if(Math.hypot(c.x2-c.x1, c.y2-c.y1) < 0.02) return;
+        snap();
+        s.targets.push({ shape:"arrow",
+          x1:Math.max(0,Math.min(1,c.x1)), y1:Math.max(0,Math.min(1,c.y1)),
+          x2:Math.max(0,Math.min(1,c.x2)), y2:Math.max(0,Math.min(1,c.y2)), color:edColor });
+        edSel[s.id]=s.targets.length-1;
+        syncLegacy(s); edRender();
+        return;
+      }
+      if(c.w>0.01 && c.h>0.01){
         snap();
         if(boxMode){
           s.targets.push({ shape:"box", ...clampBox(c), color:edColor });
@@ -902,25 +1013,40 @@ function edCard(s,i,badge){
       s.targets.push({ shape:"circle", x:.5, y:.5, r:.045, color:edColor });
       edSel[s.id]=s.targets.length-1; syncLegacy(s); edRender();
     };
+    // one drawing mode at a time; each button clears the others
+    const setMode=(which)=>{
+      boxMode   = which==="box"   ? !boxMode   : false;
+      arrowMode = which==="arrow" ? !arrowMode : false;
+      blurMode  = which==="blur"  ? !blurMode  : false;
+      addB.classList.toggle("on",boxMode);
+      addA.classList.toggle("on",arrowMode);
+      blurBtn.classList.toggle("on",blurMode);
+      wrap.classList.toggle("blurmode",boxMode||arrowMode||blurMode);
+      hint.textContent =
+        boxMode   ? "now drag on the image to draw the box" :
+        arrowMode ? "drag on the image from the arrow's tail to its tip" :
+        blurMode  ? "drag on the image to blur an area · ✕ removes a blur" :
+        HINT_DEFAULT;
+    };
     // draw a box target by dragging
     const addB=document.createElement("button"); addB.className="modebtn"; addB.textContent="▭ Draw box";
     addB.title="Draw a box target: click this, then drag on the image";
-    addB.onclick=()=>{
-      boxMode=!boxMode; if(boxMode){ blurMode=false; blurBtn.classList.remove("on"); }
-      addB.classList.toggle("on",boxMode);
-      wrap.classList.toggle("blurmode",boxMode||blurMode);
-      hint.textContent = boxMode ? "now drag on the image to draw the box" : HINT_DEFAULT;
+    addB.onclick=()=>setMode("box");
+    // draw an arrow by dragging tail → tip
+    const addA=document.createElement("button"); addA.className="modebtn"; addA.textContent="➤ Arrow";
+    addA.title="Draw an arrow: click this, then drag from tail to tip";
+    addA.onclick=()=>setMode("arrow");
+    // add a text label (edit its wording in the box that appears)
+    const addL=document.createElement("button"); addL.className="modebtn"; addL.textContent="🔤 Label";
+    addL.title="Add a text label — type its wording in the text box on this bar";
+    addL.onclick=()=>{
+      snap();
+      s.targets.push({ shape:"label", x:.38, y:.44, text:"Type here…", color:edColor });
+      edSel[s.id]=s.targets.length-1; syncLegacy(s); edRender();
     };
     const blurBtn=document.createElement("button"); blurBtn.className="modebtn"; blurBtn.textContent="🌫 Blur";
     blurBtn.title="Toggle blur mode, then drag boxes over anything sensitive";
-    blurBtn.onclick=()=>{
-      blurMode=!blurMode; if(blurMode){ boxMode=false; addB.classList.remove("on"); }
-      blurBtn.classList.toggle("on",blurMode);
-      wrap.classList.toggle("blurmode",blurMode||boxMode);
-      hint.textContent = blurMode
-        ? "drag on the image to blur an area · ✕ removes a blur"
-        : HINT_DEFAULT;
-    };
+    blurBtn.onclick=()=>setMode("blur");
     // colour of the selected target (and the default for new ones)
     const colorInp=document.createElement("input"); colorInp.type="color";
     colorInp.value=(selT && selT.color) || edColor;
@@ -935,6 +1061,21 @@ function edCard(s,i,badge){
       if(colorPre && selT){ edUndoStack.push(colorPre); if(edUndoStack.length>30) edUndoStack.shift(); updateUndoBtn(); }
       colorPre=null;
     };
+    // wording of the selected label (greyed unless a label is selected)
+    let ltPre=null;
+    const ltInp=document.createElement("input"); ltInp.type="text"; ltInp.className="ltinp";
+    ltInp.placeholder="label text…"; ltInp.title="Text of the selected label";
+    if(selT && selT.shape==="label"){ ltInp.value=selT.text||""; } else { ltInp.classList.add("dis"); }
+    ltInp.onfocus=()=>{ ltPre = ED ? cloneSteps(ED.steps) : null; };
+    ltInp.oninput=()=>{
+      if(!selT||selT.shape!=="label") return;
+      selT.text=ltInp.value;
+      const n=tgtEls[sel]; if(n){ const sp=n.querySelector(".lt"); if(sp) sp.textContent=ltInp.value; }
+    };
+    ltInp.onchange=()=>{  // one undo entry per editing session in the field
+      if(ltPre && selT && selT.shape==="label"){ edUndoStack.push(ltPre); if(edUndoStack.length>30) edUndoStack.shift(); updateUndoBtn(); }
+      ltPre=null;
+    };
     // undo lives on every step's tool bar too (same global undo as the top bar —
     // users look for it next to the tools they just used)
     const undoB=document.createElement("button"); undoB.className="modebtn"; undoB.textContent="↩ Undo";
@@ -944,7 +1085,7 @@ function edCard(s,i,badge){
     rm.onclick=()=>{ if(confirm("Remove this screenshot?")){ snap(); s.img=null; edRender(); } };
     const hint=document.createElement("span"); hint.className="hint";
     hint.textContent=HINT_DEFAULT;
-    st.append(addC,addB,blurBtn,colorInp,undoB,rm,hint);
+    st.append(addC,addB,addA,addL,blurBtn,colorInp,ltInp,undoB,rm,hint);
     el.append(st);
   } else if(s.type!=="chapter" && !calloutIcon[s.type] && s.type!=="nav"){
     const no=document.createElement("div"); no.className="noshot note";
