@@ -158,7 +158,6 @@
   .insbtns button{ border:1px solid var(--line); background:var(--card); border-radius:999px;
     padding:2px 10px; font:600 11.5px var(--font); cursor:pointer; color:var(--muted); }
   .insbtns button:hover{ border-color:var(--teal); color:var(--ink); }
-  body.gifmode .insbar{ display:none; }
   .dis{ opacity:.35; pointer-events:none; }
   .shot-tools{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:0 15px 14px; font-size:12.5px; color:var(--muted); }
   .shot-tools label{ display:flex; align-items:center; gap:5px; } .shot-tools input[type=checkbox]{ width:auto; }
@@ -181,22 +180,23 @@
   .modebtn.on{ background:var(--teal); color:#fff; border-color:var(--teal); }
   .shot-tools .hint{ margin-left:auto; font-style:italic; }
 
-  /* GIF builder: selection checkboxes + bottom control bar */
-  .estep .sel-check{ display:none; }
-  body.gifmode .estep .sel-check{ display:grid; place-items:center; flex:none;
-    width:30px; height:30px; margin-top:2px; }
-  body.gifmode .estep .sel-check input{ width:18px; height:18px; accent-color:var(--teal); cursor:pointer; }
+  /* multi-select: a checkbox on every card; selecting shows the bottom bar */
+  .estep .sel-check{ display:grid; place-items:center; flex:none; width:30px; height:30px; margin-top:2px; }
+  .estep .sel-check input{ width:18px; height:18px; accent-color:var(--teal); cursor:pointer; }
   .estep.selected{ outline:2px solid var(--teal); outline-offset:2px; }
   #gifBar{ display:none; position:fixed; bottom:0; left:0; right:0; z-index:60;
-    background:var(--ink); color:var(--paper); padding:14px 24px; gap:16px;
-    align-items:center; box-shadow:0 -10px 28px -16px rgba(0,0,0,.5); }
-  body.gifmode #gifBar{ display:flex; }
-  #gifBar .spacer{ flex:1; }
+    background:var(--ink); color:var(--paper); padding:12px 22px; gap:12px;
+    align-items:center; flex-wrap:wrap; box-shadow:0 -10px 28px -16px rgba(0,0,0,.5); }
+  #gifBar.show{ display:flex; }
+  #gifBar b{ font-size:14px; }
+  #gifBar .spacer{ flex:1; min-width:10px; }
   #gifBar label{ display:flex; align-items:center; gap:8px; font-size:13px; color:#e9e2d2; }
-  #gifBar input[type=range]{ accent-color:var(--gold); width:130px; }
+  #gifBar input[type=range]{ accent-color:var(--gold); width:120px; }
   #gifBar .btn{ background:transparent; color:var(--paper); border-color:#5a5246; }
   #gifBar .btn.go{ background:var(--teal); border-color:var(--teal); color:#fff; }
-  #gifBar .btn[disabled]{ opacity:.45; cursor:not-allowed; }
+  #gifBar .btn.danger{ background:transparent; border-color:#7a4a44; color:#f3b0a8; }
+  #gifBar .btn.danger:hover{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  #gifBar .btn[disabled]{ opacity:.4; cursor:not-allowed; }
 </style>
 </head>
 <body>
@@ -277,7 +277,6 @@
     <button class="btn tiny" id="edUndoBtn" title="Undo the last edit (Cmd/Ctrl+Z)">↩ Undo</button>
     <button class="btn tiny" id="edCopyBtn" title="Copy the whole guide — paste into Gmail, Google Docs, or Word">📋 Copy guide</button>
     <button class="btn tiny" id="edMdBtn" title="Download the guide as a Markdown file">⬇ Markdown</button>
-    <button class="btn tiny" id="gifBtn" title="Combine step screenshots into a looping animation">🎞 GIF</button>
     <button class="btn tiny" id="helpEdBtn" title="What does every button do?">❓</button>
     <button class="btn tiny" id="edSaveBtn" title="Save your progress as a draft — doesn't publish; reopen later from 📥 Drafts">💾 Save draft</button>
     <button class="btn primary tiny" id="edPublish">🚀 Publish</button>
@@ -295,15 +294,16 @@
     <button class="btn" id="edAddChapter">📖 + Add chapter heading</button>
   </div>
 
-  <!-- GIF builder bar (shown while body.gifmode) -->
+  <!-- selection action bar (appears when you tick step checkboxes) -->
   <div id="gifBar">
-    <b>🎞 Animate</b> <span id="gifCount">Tick 2+ steps</span>
+    <b id="gifCount">0 selected</b>
     <span class="spacer"></span>
-    <label>speed <input type="range" id="gifSpeed" min="400" max="2000" step="100" value="900">
+    <label>🎞 GIF speed <input type="range" id="gifSpeed" min="400" max="2000" step="100" value="900">
       <span id="gifSpeedVal">0.9s</span></label>
-    <button class="btn" id="gifCancel">Cancel</button>
-    <button class="btn go" id="gifCombine" disabled title="Replace the ticked steps with ONE animated step">🔗 Combine into 1 step</button>
-    <button class="btn" id="gifCreate" disabled title="Add the animation as a NEW step (keeps the originals)">➕ Add as new step</button>
+    <button class="btn go" id="gifCombine" disabled title="Combine the selected steps into ONE animated step">🔗 Combine into GIF</button>
+    <button class="btn" id="gifCreate" disabled title="Add the animation as a NEW step (keeps the selected ones)">➕ Add GIF as step</button>
+    <button class="btn danger" id="selDelete" disabled title="Delete the selected steps">🗑 Delete selected</button>
+    <button class="btn" id="gifCancel">✕ Clear</button>
   </div>
 </div>
 
@@ -322,7 +322,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-07-07a"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-07-07b"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -805,7 +805,9 @@ function edIbtn(txt,title,fn,danger){ const b=document.createElement("button"); 
 
 function edRender(){
   const host=$("edSteps"); host.innerHTML="";
-  if(!ED||!ED.steps.length){ host.innerHTML='<div class="card note">No steps yet — use “+ Add step”.</div>'; return; }
+  // Drop any selections whose steps no longer exist (after delete/combine).
+  if(ED){ const live=new Set(ED.steps.map(s=>s.id)); [...gifSelected].forEach(id=>{ if(!live.has(id)) gifSelected.delete(id); }); }
+  if(!ED||!ED.steps.length){ host.innerHTML='<div class="card note">No steps yet — use “+ Add step”.</div>'; updateGifBar(); return; }
   let n=0;
   ED.steps.forEach((s,i)=>{
     let badge;
@@ -816,6 +818,7 @@ function edRender(){
     host.append(edInsertBar(i)); // insert point above every card
     host.append(edCard(s,i,badge));
   });
+  updateGifBar(); // keep the bottom action bar in sync with the selection
 }
 
 // A quiet divider between cards offering "insert a step / chapter right here".
@@ -1319,29 +1322,34 @@ ${body}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
 }
 
 /* --- GIF maker: combine selected steps' screenshots into a looping animation --- */
+// Selection action bar: appears whenever ≥1 step is ticked. Combine/Add-GIF
+// need ≥2 selected steps that have screenshots; Delete works on any selection.
 function updateGifBar(){
-  const n=gifStepsForGif().length;
-  $("gifCount").textContent = n ? `${n} screenshot${n===1?"":"s"} selected` : "Tick 2+ steps";
-  $("gifCreate").disabled = n<2;
-  $("gifCombine").disabled = n<2;
+  const total=gifSelected.size;
+  const withImg=gifStepsForGif().length;
+  $("gifBar").classList.toggle("show", total>=1);
+  $("gifCount").textContent = total
+    ? `${total} selected` + (withImg>=2 ? "" : " · tick 2+ with screenshots to animate")
+    : "0 selected";
+  $("gifCombine").disabled = withImg<2;
+  $("gifCreate").disabled  = withImg<2;
+  $("selDelete").disabled  = total<1;
 }
 // Ticked steps that actually have a screenshot, kept in guide order.
 function gifStepsForGif(){ return ED ? ED.steps.filter(s=>gifSelected.has(s.id)&&s.img) : []; }
-function exitGifMode(){
-  document.body.classList.remove("gifmode");
-  $("gifBtn").classList.remove("primary");
-  gifSelected.clear();
-}
-$("gifBtn").onclick=()=>{
-  if(!ED) return;
-  if(typeof StepSnapGIF==="undefined"){ alert("The GIF encoder (gif.js) isn't on the site yet — re-run the site deploy."); return; }
-  const on=!document.body.classList.contains("gifmode");
-  document.body.classList.toggle("gifmode",on);
-  $("gifBtn").classList.toggle("primary",on);
-  if(!on){ gifSelected.clear(); edRender(); }
-  updateGifBar();
-};
+function exitGifMode(){ gifSelected.clear(); } // clears the selection
 $("gifCancel").onclick=()=>{ exitGifMode(); edRender(); };
+$("selDelete").onclick=()=>{
+  const ids=new Set(gifSelected);
+  const n=ED.steps.filter(s=>ids.has(s.id)).length;
+  if(!n) return;
+  if(!confirm(`Delete ${n} selected step${n===1?"":"s"}?`)) return;
+  snap();
+  ED.steps=ED.steps.filter(s=>!ids.has(s.id));
+  gifSelected.clear();
+  edRender();
+  edStatus(`${n} step${n===1?"":"s"} deleted`);
+};
 $("gifSpeed").oninput=()=>{ $("gifSpeedVal").textContent=($("gifSpeed").value/1000).toFixed(1)+"s"; };
 // Build the animation from the ticked steps (shared by both actions below).
 async function buildTickedGif(){
@@ -1615,6 +1623,7 @@ const HELP_EDITOR=[
   ["Made by","your name — it shows on the guide page and its homepage tile, and this device remembers it for your next guides"],
   ["🙈 Unlisted","keep the guide's link working but hide it from the homepage"],
   ["group","On each step card"],
+  ["☑ checkbox","tick the box on the left to select steps — a bar slides up from the bottom to Combine them into a GIF, add a GIF, or delete them (set the GIF speed there too)"],
   ["● Step ▾","turn the card into a 📖 Chapter heading or a 💡 Tip / ⚠️ Alert / 🔔 Warning note"],
   ["↑ ↓","move the step (you can also drag its number badge)"],
   ["📷","add or replace the screenshot with an image file"],
@@ -1633,7 +1642,9 @@ const HELP_EDITOR=[
   ["🖼✕","remove the screenshot from this step"],
   ["group","Top bar"],
   ["↩ Undo","undo the last edit (also Cmd/Ctrl+Z)"],
-  ["🎞 GIF","tick 2+ steps, then either 🔗 Combine them into one animated step, or ➕ Add the animation as a new step"],
+  ["🔗 Combine into GIF","(bottom bar) merge the selected steps into ONE animated step"],
+  ["➕ Add GIF as step","(bottom bar) add the animation as a new step, keeping the selected ones"],
+  ["🗑 Delete selected","(bottom bar) delete every selected step at once"],
   ["💾 Save draft","save your progress without publishing — reopen it later from 📥 Drafts"],
   ["📋 Copy guide","copy everything, formatted — paste into Gmail / Docs / Word"],
   ["⬇ Markdown","download the guide as a text file with images"],
