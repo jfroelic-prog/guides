@@ -4,7 +4,7 @@ import glob, html, json, re, subprocess
 
 guides = []
 for f in sorted(glob.glob("*.html")):
-    if f in ("index.html", "admin.html"):  # site chrome, not guides
+    if f in ("index.html", "admin.html", "tutorial.html"):  # site chrome, not guides
         continue
     try:
         head = open(f, encoding="utf-8", errors="ignore").read(200_000)
