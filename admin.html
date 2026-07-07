@@ -298,8 +298,8 @@
   <div id="gifBar">
     <b id="gifCount">0 selected</b>
     <span class="spacer"></span>
-    <label>🎞 GIF speed <input type="range" id="gifSpeed" min="400" max="2000" step="100" value="900">
-      <span id="gifSpeedVal">0.9s</span></label>
+    <label>🎞 GIF speed <input type="range" id="gifSpeed" min="500" max="6000" step="100" value="2000">
+      <span id="gifSpeedVal">2.0s</span></label>
     <button class="btn go" id="gifCombine" disabled title="Combine the selected steps into ONE animated step">🔗 Combine into GIF</button>
     <button class="btn" id="gifCreate" disabled title="Add the animation as a NEW step (keeps the selected ones)">➕ Add GIF as step</button>
     <button class="btn danger" id="selDelete" disabled title="Delete the selected steps">🗑 Delete selected</button>
@@ -322,7 +322,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-07-07b"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-07-07c"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -1169,6 +1169,26 @@ function edCard(s,i,badge){
     hint.textContent=HINT_DEFAULT;
     st.append(addC,addB,addA,addL,blurBtn,colorInp,ltInp,undoB,rm,hint);
     el.append(st);
+
+    // Combined/added GIF steps keep their source frames → re-time the speed anytime.
+    if(String(s.img).startsWith("data:image/gif") && Array.isArray(s.gifSrc) && s.gifSrc.length>=2){
+      const gr=document.createElement("div"); gr.className="shot-tools";
+      const glbl=document.createElement("label"); glbl.style.width="100%";
+      const grange=document.createElement("input"); grange.type="range"; grange.min=500; grange.max=6000; grange.step=100; grange.value=s.gifDelay||2000;
+      grange.style.flex="1";
+      const gval=document.createElement("span"); gval.textContent=((s.gifDelay||2000)/1000).toFixed(1)+"s / frame";
+      let gpre=null;
+      grange.onpointerdown=()=>{ gpre=ED?cloneSteps(ED.steps):null; };
+      grange.oninput=()=>{ gval.textContent=(grange.value/1000).toFixed(1)+"s / frame"; };
+      grange.onchange=async()=>{
+        if(gpre){ edUndoStack.push(gpre); if(edUndoStack.length>30) edUndoStack.shift(); updateUndoBtn(); } gpre=null;
+        edDirty=true; edStatus("Re-timing animation…");
+        try{ await reencodeGif(s, +grange.value); const im=wrap.querySelector("img"); if(im) im.src=s.img; edStatus("Animation speed updated ✓"); }
+        catch(e){ console.error(e); edStatus("Couldn't re-time — "+e.message); }
+      };
+      glbl.append(document.createTextNode("🎞 animation speed "), grange, document.createTextNode(" "), gval);
+      gr.append(glbl); el.append(gr);
+    }
   } else if(s.type!=="chapter" && !calloutIcon[s.type] && s.type!=="nav"){
     const no=document.createElement("div"); no.className="noshot note";
     no.textContent="No screenshot on this step — use 📷 above to add one.";
@@ -1365,15 +1385,29 @@ async function buildTickedGif(){
   const H=Math.round(W*Math.max(...imgs.map(im=>im.naturalHeight/im.naturalWidth)));
   const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
   const ctx=cv.getContext("2d");
+  const frameSrc=[]; // the fitted frames, kept on the step so speed can be re-timed later
   const frames=imgs.map(im=>{
     ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,W,H);
     const scale=Math.min(W/im.naturalWidth, H/im.naturalHeight);
     const w=im.naturalWidth*scale, h=im.naturalHeight*scale;
     ctx.drawImage(im,(W-w)/2,(H-h)/2,w,h);
+    frameSrc.push(cv.toDataURL("image/jpeg",0.72));
     return ctx.getImageData(0,0,W,H).data;
   });
-  const bytes=StepSnapGIF.encode(frames,{ width:W, height:H, delay:+$("gifSpeed").value, loop:0 });
-  return { bytes, url: await bytesToDataUrl(bytes,"image/gif"), chosen };
+  const delay=+$("gifSpeed").value;
+  const bytes=StepSnapGIF.encode(frames,{ width:W, height:H, delay, loop:0 });
+  return { bytes, url: await bytesToDataUrl(bytes,"image/gif"), chosen, frameSrc, delay };
+}
+// Re-encode a stored-frame GIF step at a new per-frame delay (ms), in place.
+async function reencodeGif(s, delay){
+  const imgs=await Promise.all(s.gifSrc.map(loadImage));
+  const W=imgs[0].naturalWidth, H=imgs[0].naturalHeight;
+  const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+  const ctx=cv.getContext("2d");
+  const frames=imgs.map(im=>{ ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,W,H); ctx.drawImage(im,0,0,W,H); return ctx.getImageData(0,0,W,H).data; });
+  const bytes=StepSnapGIF.encode(frames,{ width:W, height:H, delay, loop:0 });
+  s.img=await bytesToDataUrl(bytes,"image/gif");
+  s.gifDelay=delay;
 }
 // "Add as new step": append an animated overview at the end + download the .gif.
 $("gifCreate").onclick=async()=>{
@@ -1384,7 +1418,7 @@ $("gifCreate").onclick=async()=>{
     edDownload(edSlug(ED.title)+"-animation.gif","image/gif",g.bytes);
     snap();
     ED.steps.push({ id:edUid(), type:"note", title:"Animated overview", desc:"",
-                    img:g.url, hx:.5, hy:.5, hr:.045, showHl:false, blurs:[], targets:[] });
+                    img:g.url, gifSrc:g.frameSrc, gifDelay:g.delay, hx:.5, hy:.5, hr:.045, showHl:false, blurs:[], targets:[] });
     exitGifMode(); edRender();
     edStatus("GIF created ✓ (downloaded + added as a step)");
     window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"});
@@ -1410,7 +1444,7 @@ $("gifCombine").onclick=async()=>{
     snap();
     for(let k=idx.length-1;k>=0;k--) ED.steps.splice(idx[k],1); // remove high→low
     ED.steps.splice(at,0,{ id:edUid(), type:"note", title:keepTitle, desc:keepDesc,
-                           img:g.url, hx:.5, hy:.5, hr:.045, showHl:false, blurs:[], targets:[] });
+                           img:g.url, gifSrc:g.frameSrc, gifDelay:g.delay, hx:.5, hy:.5, hr:.045, showHl:false, blurs:[], targets:[] });
     exitGifMode(); edRender();
     edStatus(g.chosen.length+" steps combined into one animated step ✓");
     requestAnimationFrame(()=>{ const el=$("edSteps").querySelectorAll(".estep")[at]; if(el) el.scrollIntoView({block:"center",behavior:"smooth"}); });
@@ -1645,6 +1679,7 @@ const HELP_EDITOR=[
   ["🔗 Combine into GIF","(bottom bar) merge the selected steps into ONE animated step"],
   ["➕ Add GIF as step","(bottom bar) add the animation as a new step, keeping the selected ones"],
   ["🗑 Delete selected","(bottom bar) delete every selected step at once"],
+  ["🎞 animation speed","on a GIF step, a slider re-times it anytime — bigger = slower (up to 6s per frame)"],
   ["💾 Save draft","save your progress without publishing — reopen it later from 📥 Drafts"],
   ["📋 Copy guide","copy everything, formatted — paste into Gmail / Docs / Word"],
   ["⬇ Markdown","download the guide as a text file with images"],
