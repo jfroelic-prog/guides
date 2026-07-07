@@ -131,6 +131,23 @@
     border-radius:6px; background:var(--card); cursor:pointer; }
   .shot-tools .ltinp{ width:150px; padding:5px 8px; font-size:12.5px; }
 
+  /* ❓ help overlay: a legend of every icon/button, per screen */
+  #helpOv{ position:fixed; inset:0; z-index:80; background:rgba(33,29,23,.45);
+    display:flex; align-items:flex-start; justify-content:center; padding:5vh 16px; }
+  #helpOv.hidden{ display:none; }
+  .helpcard{ background:var(--card); border:1px solid var(--line); border-radius:16px;
+    box-shadow:0 18px 50px -20px rgba(0,0,0,.5); max-width:560px; width:100%;
+    max-height:88vh; display:flex; flex-direction:column; }
+  .helphead{ display:flex; align-items:center; gap:8px; padding:14px 18px;
+    border-bottom:1px solid var(--line); }
+  .helphead b{ flex:1; font-size:16px; }
+  #helpBody{ overflow:auto; padding:10px 18px 16px; }
+  .hrow{ display:flex; gap:12px; padding:7px 0; border-bottom:1px dashed #efe9db; font-size:13.5px; }
+  .hrow:last-child{ border-bottom:0; }
+  .hrow b{ flex:none; width:120px; font-weight:700; }
+  .hrow span{ color:#5c5346; }
+  .hgroup{ margin:12px 0 2px; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+
   /* insert bars: quiet dashed dividers between cards that offer "+ Step / Chapter" */
   .insbar{ display:flex; justify-content:center; align-items:center; position:relative;
     height:22px; margin:-4px 0; opacity:.35; transition:opacity .12s; }
@@ -213,7 +230,8 @@
       Forgot it, or new key? <a href="#" id="forget">Reset this device</a>
       (re-enter the team key).</p>
   </div>
-  <p class="note" id="gateBuild" style="margin-top:16px"></p>
+  <p class="note" style="margin-top:16px">🎓 New here? <a href="tutorial.html" target="_blank" rel="noopener">Open the step-by-step tutorial</a> — it walks the whole journey.</p>
+  <p class="note" id="gateBuild" style="margin-top:8px"></p>
 </div>
 
 <!-- ============ APP ============ -->
@@ -222,6 +240,8 @@
     <h1>Step<span>Snap</span> Site Admin</h1>
     <span class="sp"></span>
     <span class="saved" id="status"></span>
+    <button class="btn tiny" id="helpAdminBtn" title="What does every button do?">❓</button>
+    <a class="btn tiny" href="tutorial.html" target="_blank" rel="noopener" style="text-decoration:none" title="The full walkthrough, start to finish">🎓 Tutorial</a>
     <button class="btn tiny" id="refresh">↻ Refresh</button>
     <button class="btn tiny" id="lock">🔒 Lock</button>
   </div>
@@ -258,6 +278,7 @@
     <button class="btn tiny" id="edCopyBtn" title="Copy the whole guide — paste into Gmail, Google Docs, or Word">📋 Copy guide</button>
     <button class="btn tiny" id="edMdBtn" title="Download the guide as a Markdown file">⬇ Markdown</button>
     <button class="btn tiny" id="gifBtn" title="Combine step screenshots into a looping animation">🎞 GIF</button>
+    <button class="btn tiny" id="helpEdBtn" title="What does every button do?">❓</button>
     <button class="btn primary tiny" id="edPublish">🚀 Publish</button>
   </div>
   <p class="sub" id="edWhere"></p>
@@ -284,10 +305,22 @@
   </div>
 </div>
 
+<!-- ============ ❓ HELP OVERLAY ============ -->
+<div id="helpOv" class="hidden">
+  <div class="helpcard">
+    <div class="helphead">
+      <b id="helpTitle">What everything does</b>
+      <a class="btn tiny" href="tutorial.html" target="_blank" rel="noopener" style="text-decoration:none">🎓 Full tutorial</a>
+      <button class="btn tiny" id="helpClose">✕ Close</button>
+    </div>
+    <div id="helpBody"></div>
+  </div>
+</div>
+
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-07-05c"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-07-05e"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -1444,7 +1477,9 @@ async function edOpen(pathOrFile, isDraft){
     }
     const p=JSON.parse(el.textContent);
     ED={ file:(p.file || (isDraft?null:pathOrFile)), draftPath:(isDraft?pathOrFile:null),
-      title:p.title||"", desc:p.desc||"", author:p.author||"", unlisted:!!p.unlisted,
+      title:p.title||"", desc:p.desc||"",
+      // No author yet? Pre-fill the name this person last used on this device.
+      author:p.author||localStorage.getItem("stepsnapAuthor")||"", unlisted:!!p.unlisted,
       steps:(p.steps||[]).map(s=>({ ...s, blurs:s.blurs||[],
         // Migrate the legacy single highlight into the multi-target list.
         targets: Array.isArray(s.targets) ? s.targets
@@ -1514,8 +1549,77 @@ function renderDrafts(drafts){
 /* wire the editor's own controls (once) */
 $("edTitle").oninput=e=>{ if(ED) ED.title=e.target.value; };
 $("edDesc").oninput=e=>{ if(ED) ED.desc=e.target.value; };
-$("edAuthor").oninput=e=>{ if(ED) ED.author=e.target.value; };
+$("edAuthor").oninput=e=>{ if(ED) ED.author=e.target.value;
+  // Remember the name on this device so future guides pre-fill it.
+  try{ localStorage.setItem("stepsnapAuthor", e.target.value.trim()); }catch(x){} };
 $("edUnlisted").onchange=e=>{ if(ED) ED.unlisted=e.target.checked; };
+/* --- ❓ help: a legend of every icon/button, per screen --- */
+const HELP_ADMIN=[
+  ["group","Drafts (pushed from the extension)"],
+  ["✏️ Open & edit","load the draft into the editor to finish it"],
+  ["🗑 Discard","delete the draft (the live site is untouched)"],
+  ["group","Guides (live on the site)"],
+  ["✏️ Edit","open the live guide in the editor — publishing overwrites it"],
+  ["↗ Open","view the live guide page"],
+  ["🙈 Unlist / 👁 List","hide from the homepage but keep the link working / bring it back"],
+  ["✎ Rename","change the guide's web address (its filename)"],
+  ["🔗 Copy","copy the guide's shareable link"],
+  ["🗑 Remove","take the guide off the live site"],
+  ["↑ ↓ and ⭐","arrange the homepage order and star the featured row…"],
+  ["Save layout","…then this stores that arrangement"],
+  ["group","Top bar & tools"],
+  ["🩺 Run check","scan every live guide for missing pieces"],
+  ["↻ Refresh","reload the lists"],
+  ["🔒 Lock","log out on this device (password unlocks again)"],
+  ["🎓 Tutorial","the full start-to-finish walkthrough"],
+];
+const HELP_EDITOR=[
+  ["group","The guide's details (top card)"],
+  ["Made by","your name — it shows on the guide page and its homepage tile, and this device remembers it for your next guides"],
+  ["🙈 Unlisted","keep the guide's link working but hide it from the homepage"],
+  ["group","On each step card"],
+  ["● Step ▾","turn the card into a 📖 Chapter heading or a 💡 Tip / ⚠️ Alert / 🔔 Warning note"],
+  ["↑ ↓","move the step (you can also drag its number badge)"],
+  ["📷","add or replace the screenshot with an image file"],
+  ["⧉","duplicate the step"],
+  ["✕","delete the step"],
+  ["+ Step · 📖 Chapter","the faint dashed bars between cards insert right at that spot"],
+  ["group","On the screenshot"],
+  ["🎯 Add circle","a click-here ring — drag it into place"],
+  ["▭ Draw box","drag on the image to outline an area"],
+  ["➤ Arrow","drag from the arrow's tail to its tip"],
+  ["🔤 Label","a text sign — type its wording in the tool-bar box"],
+  ["colour square","recolours the selected shape (and new ones)"],
+  ["shape's ✕","deletes that one shape"],
+  ["corner square","resizes the selected shape (on an arrow it moves the tip)"],
+  ["🌫 Blur","drag over anything sensitive — hidden permanently when published"],
+  ["🖼✕","remove the screenshot from this step"],
+  ["group","Top bar"],
+  ["↩ Undo","undo the last edit (also Cmd/Ctrl+Z)"],
+  ["🎞 GIF","tick a few steps and combine them into a looping animation"],
+  ["📋 Copy guide","copy everything, formatted — paste into Gmail / Docs / Word"],
+  ["⬇ Markdown","download the guide as a text file with images"],
+  ["🚀 Publish","put the guide live on the site (a finished draft cleans itself up)"],
+];
+function showHelp(kind){
+  const list=kind==="editor"?HELP_EDITOR:HELP_ADMIN;
+  $("helpTitle").textContent=kind==="editor"?"The editor, button by button":"The admin, button by button";
+  const body=$("helpBody"); body.innerHTML="";
+  list.forEach(([a,b])=>{
+    if(a==="group"){ const g=document.createElement("div"); g.className="hgroup"; g.textContent=b; body.append(g); return; }
+    const row=document.createElement("div"); row.className="hrow";
+    const ic=document.createElement("b"); ic.textContent=a;
+    const tx=document.createElement("span"); tx.textContent=b;
+    row.append(ic,tx); body.append(row);
+  });
+  $("helpOv").classList.remove("hidden");
+}
+$("helpAdminBtn").onclick=()=>showHelp("admin");
+$("helpEdBtn").onclick=()=>showHelp("editor");
+$("helpClose").onclick=()=>$("helpOv").classList.add("hidden");
+$("helpOv").onclick=(e)=>{ if(e.target.id==="helpOv") $("helpOv").classList.add("hidden"); };
+window.addEventListener("keydown",(e)=>{ if(e.key==="Escape") $("helpOv").classList.add("hidden"); });
+
 $("edBack").onclick=()=>{ if(confirm("Leave the editor? Any changes you haven't published are discarded.")) showApp(); };
 $("edUndoBtn").onclick=undo;
 $("edPublish").onclick=edPublish;
