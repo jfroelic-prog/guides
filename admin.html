@@ -322,7 +322,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-07-07c"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-07-07d"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -1170,8 +1170,9 @@ function edCard(s,i,badge){
     st.append(addC,addB,addA,addL,blurBtn,colorInp,ltInp,undoB,rm,hint);
     el.append(st);
 
-    // Combined/added GIF steps keep their source frames → re-time the speed anytime.
-    if(String(s.img).startsWith("data:image/gif") && Array.isArray(s.gifSrc) && s.gifSrc.length>=2){
+    // Any GIF step can be re-timed. If its source frames weren't stored (made
+    // before that feature, or by an older combine), we decode them on first use.
+    if(String(s.img).startsWith("data:image/gif")){
       const gr=document.createElement("div"); gr.className="shot-tools";
       const glbl=document.createElement("label"); glbl.style.width="100%";
       const grange=document.createElement("input"); grange.type="range"; grange.min=500; grange.max=6000; grange.step=100; grange.value=s.gifDelay||2000;
@@ -1183,8 +1184,14 @@ function edCard(s,i,badge){
       grange.onchange=async()=>{
         if(gpre){ edUndoStack.push(gpre); if(edUndoStack.length>30) edUndoStack.shift(); updateUndoBtn(); } gpre=null;
         edDirty=true; edStatus("Re-timing animation…");
-        try{ await reencodeGif(s, +grange.value); const im=wrap.querySelector("img"); if(im) im.src=s.img; edStatus("Animation speed updated ✓"); }
-        catch(e){ console.error(e); edStatus("Couldn't re-time — "+e.message); }
+        try{
+          if(!Array.isArray(s.gifSrc) || s.gifSrc.length<2) s.gifSrc=await decodeGifFrames(s.img);
+          if(!s.gifSrc || s.gifSrc.length<2) throw new Error("only one frame found");
+          await reencodeGif(s, +grange.value);
+          const im=wrap.querySelector("img"); if(im) im.src=s.img;
+          edStatus("Animation speed updated ✓");
+        }
+        catch(e){ console.error(e); edStatus(""); alert("Couldn't change this animation's speed.\n\n"+(e.message||"")+"\n\nTip: animations made in the current version change instantly; very old ones may need to be remade."); }
       };
       glbl.append(document.createTextNode("🎞 animation speed "), grange, document.createTextNode(" "), gval);
       gr.append(glbl); el.append(gr);
@@ -1397,6 +1404,30 @@ async function buildTickedGif(){
   const delay=+$("gifSpeed").value;
   const bytes=StepSnapGIF.encode(frames,{ width:W, height:H, delay, loop:0 });
   return { bytes, url: await bytesToDataUrl(bytes,"image/gif"), chosen, frameSrc, delay };
+}
+// Pull the frames back out of an existing GIF (for steps made before we started
+// storing the source frames). Uses the browser's ImageDecoder (Chrome/Edge).
+async function decodeGifFrames(dataUrl){
+  if(typeof ImageDecoder==="undefined")
+    throw new Error("this browser can't re-read the animation — remake it to change its speed");
+  const buf=await (await fetch(dataUrl)).arrayBuffer();
+  const dec=new ImageDecoder({ data:buf, type:"image/gif" });
+  await dec.tracks.ready;
+  const count=(dec.tracks.selectedTrack && dec.tracks.selectedTrack.frameCount) || 1;
+  const cv=document.createElement("canvas");
+  const urls=[];
+  for(let i=0;i<count;i++){
+    const { image }=await dec.decode({ frameIndex:i });
+    cv.width=image.displayWidth||image.codedWidth;
+    cv.height=image.displayHeight||image.codedHeight;
+    const ctx=cv.getContext("2d");
+    ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.drawImage(image,0,0);
+    urls.push(cv.toDataURL("image/jpeg",0.72));
+    image.close();
+  }
+  dec.close();
+  return urls;
 }
 // Re-encode a stored-frame GIF step at a new per-frame delay (ms), in place.
 async function reencodeGif(s, delay){
@@ -1679,7 +1710,7 @@ const HELP_EDITOR=[
   ["🔗 Combine into GIF","(bottom bar) merge the selected steps into ONE animated step"],
   ["➕ Add GIF as step","(bottom bar) add the animation as a new step, keeping the selected ones"],
   ["🗑 Delete selected","(bottom bar) delete every selected step at once"],
-  ["🎞 animation speed","on a GIF step, a slider re-times it anytime — bigger = slower (up to 6s per frame)"],
+  ["🎞 animation speed","on ANY GIF step, a slider re-times it anytime — bigger = slower (up to 6s per frame); older GIFs are re-read automatically on first change"],
   ["💾 Save draft","save your progress without publishing — reopen it later from 📥 Drafts"],
   ["📋 Copy guide","copy everything, formatted — paste into Gmail / Docs / Word"],
   ["⬇ Markdown","download the guide as a text file with images"],
