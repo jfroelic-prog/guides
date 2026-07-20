@@ -330,7 +330,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-07-20c"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-07-20d"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -705,22 +705,30 @@ function flatten(s){ return new Promise(res=>{
   const im=new Image();
   im.onload=()=>{ const c=document.createElement("canvas"); c.width=im.width; c.height=im.height;
     const x=c.getContext("2d"); x.drawImage(im,0,0);
-    // Soft blur, not a hard mosaic. Two passes so it both LOOKS smooth and is
-    // genuinely unreadable: (1) downscale the area, which throws the detail away
-    // for good, (2) scale it back up smoothed + a canvas blur filter, so there
-    // are no chunky squares. We sample a padded region and clip to the box,
-    // otherwise the blur fades toward transparent at the box edges.
+    // Soft blur, not a hard mosaic. Per box we build an OPAQUE patch out of
+    // nothing but downscaled (already unreadable) pixels, then stamp it in:
+    //   1. downscale the padded area 10× — this is what truly destroys detail
+    //   2. draw it back up smoothed = the patch's opaque base
+    //   3. draw it again with ctx.filter blur on top = the smooth finish
+    //   4. clip to the box and stamp the patch with NO filter
+    // Building an opaque patch matters for privacy: drawing a blurred layer
+    // straight onto the photo let the ORIGINAL show through wherever the blur
+    // faded to transparent — near an image edge there's no room to pad, so the
+    // sharp text underneath came back. The patch has no transparency at all.
     if(hasBlur){ for(const b of s.blurs){ const bx=b.x*im.width,by=b.y*im.height,bw=Math.max(1,b.w*im.width),bh=Math.max(1,b.h*im.height);
-      const pad=Math.ceil(Math.min(bw,bh)*0.5)+8;
+      const rad=Math.max(8,Math.round(Math.min(bw,bh)*0.10)), pad=rad*3;
       const sx=Math.max(0,bx-pad), sy=Math.max(0,by-pad);
       const sw=Math.min(im.width-sx, bw+(bx-sx)+pad), sh=Math.min(im.height-sy, bh+(by-sy)+pad);
       const t=document.createElement("canvas"); const f=10; t.width=Math.max(1,Math.round(sw/f)); t.height=Math.max(1,Math.round(sh/f));
       const tx=t.getContext("2d"); tx.imageSmoothingEnabled=true; tx.imageSmoothingQuality="high";
       tx.drawImage(im,sx,sy,sw,sh,0,0,t.width,t.height);
-      x.save(); x.beginPath(); x.rect(bx,by,bw,bh); x.clip();
-      x.filter="blur("+Math.max(3,Math.round(Math.min(bw,bh)*0.06))+"px)";
-      x.imageSmoothingEnabled=true; x.imageSmoothingQuality="high";
-      x.drawImage(t,0,0,t.width,t.height,sx,sy,sw,sh); x.restore(); } }
+      const p=document.createElement("canvas"); p.width=sw; p.height=sh;
+      const pc=p.getContext("2d"); pc.imageSmoothingEnabled=true; pc.imageSmoothingQuality="high";
+      pc.drawImage(t,0,0,t.width,t.height,0,0,sw,sh);
+      pc.filter="blur("+rad+"px)";
+      pc.drawImage(t,0,0,t.width,t.height,0,0,sw,sh);
+      x.save(); x.beginPath(); x.rect(bx,by,bw,bh); x.clip(); x.filter="none";
+      x.drawImage(p,sx,sy); x.restore(); } }
     for(const t of targets){
       const lw=Math.max(4,im.width*0.004);
       const col=t.color||"#f97316"; // default: orange, like Scribe
