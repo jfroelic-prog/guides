@@ -322,7 +322,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-07-07d"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-07-20a"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -365,8 +365,13 @@ async function decryptToken(encObj, password){
 /* ===== GitHub API ===== */
 function gh(path, opts){
   const [o,r]=splitRepo(REPO);
+  // cache:"no-store" is IMPORTANT: GitHub answers authenticated GETs with
+  // `Cache-Control: private, max-age=60`, so the browser will happily replay a
+  // up-to-60-second-old response — including the file's `sha`. A stale sha makes
+  // the next write fail with "409 … does not match <sha>" (hit in the wild right
+  // after 💾 Save draft, which changes the draft's sha, then 🚀 Publish).
   return fetch(`${API_BASE}/repos/${o}/${r}${path}`, {
-    ...opts, headers:{ Authorization:"Bearer "+TOKEN, Accept:"application/vnd.github+json",
+    ...opts, cache:"no-store", headers:{ Authorization:"Bearer "+TOKEN, Accept:"application/vnd.github+json",
       ...(opts&&opts.body?{"Content-Type":"application/json"}:{}) , ...(opts&&opts.headers||{}) } });
 }
 // Encode a repo path (keeps "/" so drafts/foo.html resolves into the subfolder).
@@ -1619,8 +1624,19 @@ async function edPublish(){
     }
     edStatus("Publishing…");
     await ghPut(fileName, html, existing?existing.sha:null, "Publish "+fileName);
-    if(draftPath){ const d=await ghGet(draftPath); if(d) await ghDelete(draftPath, d.sha, "Remove draft "+draftPath); }
   }catch(e){ console.error(e); edStatus(""); alert("Couldn't publish.\n\n"+e.message); return; }
+  // The guide is LIVE from here on. Clearing the draft is only cleanup, so a
+  // failure here must never be reported as "couldn't publish" (it used to be,
+  // which made a successful publish look broken).
+  if(draftPath){
+    try{ const d=await ghGet(draftPath); if(d) await ghDelete(draftPath, d.sha, "Remove draft "+draftPath); }
+    catch(e){
+      console.error(e);
+      alert(`Published “${title}” ✓\n\nOne loose end: the old copy in 📥 Drafts couldn’t be removed `
+           +`(${e.message}).\n\nThe guide is live — just Discard that draft from the Drafts list.`);
+      edStatus("Published ✓"); showApp(); loadAll().catch(()=>{}); return;
+    }
+  }
   // Published OK — refreshing the list is best-effort and must not look like a failure.
   edStatus("Published ✓"); showApp(); loadAll().catch(()=>{});
   alert(`Published “${title}” ✓\n\nIt’s live on the site in about a minute.`);
