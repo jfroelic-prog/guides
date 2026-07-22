@@ -330,7 +330,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-07-20d"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-07-22a"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -832,6 +832,62 @@ function edReplaceImage(s){
   };
   inp.click();
 }
+// Per-step media row: record a voice-over (mic) and/or attach a YouTube link.
+// Both are optional and save straight onto the step (s.audio data URL, s.video
+// = the raw link); the builder renders a ▶ player / thumbnail in the guide.
+function edMediaRow(s){
+  const row=document.createElement("div"); row.className="shot-tools mediarow";
+
+  // --- voice-over ---
+  const recBtn=document.createElement("button"); recBtn.className="modebtn";
+  let rec=null, chunks=[];
+  const setIdle=()=>{ recBtn.textContent=s.audio?"🎙 Re-record":"🎙 Record voice-over"; recBtn.classList.remove("on"); };
+  setIdle();
+  recBtn.onclick=async()=>{
+    if(rec && rec.state==="recording"){ rec.stop(); return; }
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      chunks=[]; rec=new MediaRecorder(stream);
+      rec.ondataavailable=e=>{ if(e.data && e.data.size) chunks.push(e.data); };
+      rec.onstop=()=>{
+        stream.getTracks().forEach(t=>t.stop());
+        const blob=new Blob(chunks,{type:(rec&&rec.mimeType)||"audio/webm"});
+        const fr=new FileReader();
+        fr.onload=()=>{ snap(); s.audio=fr.result; edRender(); };
+        fr.readAsDataURL(blob);
+      };
+      rec.start();
+      recBtn.textContent="⏹ Stop recording"; recBtn.classList.add("on");
+    }catch(e){ alert("Couldn't start recording.\n\n"+(e.message||e)+"\n\nMake sure your browser is allowed to use the microphone (look for the mic icon in the address bar)."); }
+  };
+  row.append(recBtn);
+  if(s.audio){
+    const au=document.createElement("audio"); au.controls=true; au.src=s.audio; au.style.height="34px";
+    const del=document.createElement("button"); del.className="modebtn"; del.textContent="✕ voice-over";
+    del.title="Remove the voice-over"; del.onclick=()=>{ snap(); delete s.audio; edRender(); };
+    row.append(au,del);
+  }
+
+  // --- YouTube video ---
+  const vidInp=document.createElement("input"); vidInp.type="text"; vidInp.className="ltinp";
+  vidInp.placeholder="🎬 Paste a YouTube link"; vidInp.value=s.video||"";
+  vidInp.style.width="230px";
+  const apply=()=>{
+    const v=vidInp.value.trim();
+    if(v && !ytId(v)){ vidInp.style.borderColor="var(--accent)"; edStatus("That doesn't look like a YouTube link."); return; }
+    vidInp.style.borderColor="";
+    if((s.video||"")!==v){ snap(); if(v) s.video=v; else delete s.video; edDirty=true; edRender(); }
+  };
+  vidInp.onchange=apply;
+  vidInp.onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); apply(); } };
+  row.append(vidInp);
+  if(ytId(s.video)){
+    const ok=document.createElement("a"); ok.className="modebtn"; ok.textContent="▶ preview";
+    ok.href="https://youtu.be/"+ytId(s.video); ok.target="_blank"; ok.rel="noopener";
+    ok.title="Open the video in a new tab"; row.append(ok);
+  }
+  return row;
+}
 function edGrow(t){ t.style.height="auto"; t.style.height=t.scrollHeight+"px"; }
 function edMove(i,dir){ const j=i+dir; if(j<0||j>=ED.steps.length) return; snap(); [ED.steps[i],ED.steps[j]]=[ED.steps[j],ED.steps[i]]; edRender(); }
 function edIbtn(txt,title,fn,danger){ const b=document.createElement("button"); b.className="ibtn"+(danger?" danger":""); b.textContent=txt; b.title=title; b.onclick=fn; return b; }
@@ -1238,6 +1294,9 @@ function edCard(s,i,badge){
     el.append(no);
   }
 
+  // Voice-over + video controls on every real step and callout (not chapters/nav).
+  if(s.type!=="chapter" && s.type!=="nav") el.append(edMediaRow(s));
+
   num.onmousedown=()=>{ el.draggable=true; };
   el.ondragstart=(e)=>{ e.dataTransfer.setData("text/plain",i); el.style.opacity=".5"; };
   el.ondragend=()=>{ el.style.opacity=""; el.draggable=false; };
@@ -1246,6 +1305,28 @@ function edCard(s,i,badge){
   return el;
 }
 
+// A YouTube link (watch, youtu.be, embed, shorts, live) OR a bare id → the
+// 11-char video id, else "". Kept identical to export.js so exports match.
+function ytId(u){
+  if(!u) return "";
+  u=(""+u).trim();
+  if(/^[\w-]{11}$/.test(u)) return u;
+  const m=u.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/|\/live\/)([\w-]{11})/);
+  return m?m[1]:"";
+}
+// Per-step media (recorded voice-over + a YouTube video) for the exported guide.
+// String-concatenated (not a template literal) so it stays byte-identical to the
+// copy in export.js buildGuideExport. Absent fields render nothing.
+function stepMediaHtml(s){
+  var out="";
+  if(s.audio) out+='<div class="vo"><span class="volabel">🎙 Voice-over</span>'+
+    '<audio controls preload="none" src="'+s.audio+'"></audio></div>';
+  var id=ytId(s.video);
+  if(id) out+='<div class="vid"><button class="vidbtn" type="button" data-yt="'+id+
+    '" style="background-image:url(https://i.ytimg.com/vi/'+id+'/hqdefault.jpg)">'+
+    '<span class="vidplay">▶</span><span class="vidcap">Watch video</span></button></div>';
+  return out;
+}
 /* --- build the exported/published HTML (identical shape to the extension) --- */
 async function edBuildExport(){
   const steps=ED.steps;
@@ -1265,11 +1346,11 @@ async function edBuildExport(){
       return `<h2 class="chapter" id="${id}">${linkify(s.title)}</h2>`+(s.desc?`<p class="chapter-lead">${linkifyML(s.desc)}</p>`:""); }
     if(calloutIcon[s.type]){ return `<div class="callout ${s.type}"><span class="cico">${calloutIcon[s.type]}</span>
       <div class="ctext">${s.title?`<h2>${linkify(s.title)}</h2>`:""}${s.desc?`<p>${linkifyML(s.desc)}</p>`:""}
-      ${imgs[i]?`<img src="${imgs[i]}">`:""}</div></div>`; }
+      ${imgs[i]?`<img src="${imgs[i]}">`:""}${stepMediaHtml(s)}</div></div>`; }
     const num=s.type==="nav"?"→":++n;
     return `<div class="step"><div class="head"><span class="n">${num}</span>
       <div><h2>${linkify(s.title)}</h2>${s.desc?`<p>${linkifyML(s.desc)}</p>`:""}</div></div>
-      ${imgs[i]?`<img src="${imgs[i]}">`:""}</div>`;
+      ${imgs[i]?`<img src="${imgs[i]}">`:""}${stepMediaHtml(s)}</div>`;
   }).join("\n");
   const toc=chapters.length>=2?`<nav id="toc" aria-label="Chapters">
 <h4>📖 Chapters</h4><button id="tocToggle" type="button" aria-expanded="false">📖 Chapters</button>
@@ -1305,6 +1386,16 @@ img{display:block;width:calc(100% - 36px);margin:0 18px 18px;border-radius:8px;b
 .callout.tip{background:#eef6f3;border-color:#bfe0d6}
 .callout.alert{background:#fdeceb;border-color:#f1bdb6}
 .callout.warning{background:#fbf4e2;border-color:#ecdca6}
+.vo{display:flex;align-items:center;gap:10px;margin:0 18px 16px;flex-wrap:wrap}
+.vo .volabel{font-size:13px;color:#7c7466;font-weight:600}
+.vo audio{height:36px;max-width:100%}
+.vid{margin:0 18px 18px}
+.vidbtn{position:relative;display:block;width:100%;max-width:520px;aspect-ratio:16/9;border:1px solid #e6decd;border-radius:8px;background-color:#000;background-position:center;background-size:cover;background-repeat:no-repeat;cursor:pointer;padding:0;overflow:hidden}
+.vidbtn .vidplay{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:62px;height:62px;border-radius:50%;background:rgba(210,63,49,.92);color:#fff;font-size:24px;display:grid;place-items:center;box-shadow:0 6px 20px -6px rgba(0,0,0,.6)}
+.vidbtn .vidcap{position:absolute;left:0;right:0;bottom:0;padding:20px 12px 8px;color:#fff;font-weight:600;font-size:14px;text-align:left;text-shadow:0 1px 3px rgba(0,0,0,.9);background:linear-gradient(transparent,rgba(0,0,0,.55))}
+.vid iframe{width:100%;max-width:520px;aspect-ratio:16/9;border:0;border-radius:8px}
+.callout .vo,.callout .vid{margin:12px 0 0}
+@media print{.vo,.vid{display:none}}
 h2.chapter{font-size:25px;margin:42px 0 6px;padding-top:14px;border-top:2px solid #e6decd;scroll-margin-top:16px}
 .chapter-lead{color:#7c7466;margin:0 0 8px;font-size:15px}
 #toc{position:sticky;top:16px;align-self:flex-start;flex:0 0 224px;max-height:calc(100vh - 32px);overflow:auto;
@@ -1379,6 +1470,22 @@ ${body}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
     links.forEach(function(a){ a.classList.toggle("active", !!cur && a.getAttribute("href")==="#"+cur.id); });
   }
   window.addEventListener("scroll",spy,{passive:true}); window.addEventListener("resize",spy); spy();
+})();
+<\/script>
+<script>
+(function(){
+  // Click a video thumbnail → swap in the YouTube player. Nothing loads from
+  // YouTube until asked, so guides stay light and open fast.
+  [].slice.call(document.querySelectorAll(".vidbtn")).forEach(function(b){
+    b.addEventListener("click",function(){
+      var id=b.getAttribute("data-yt"); if(!id) return;
+      var f=document.createElement("iframe");
+      f.src="https://www.youtube.com/embed/"+id+"?autoplay=1&rel=0";
+      f.setAttribute("allow","autoplay; encrypted-media; picture-in-picture");
+      f.setAttribute("allowfullscreen",""); f.title="Video";
+      b.replaceWith(f);
+    });
+  });
 })();
 <\/script></body></html>`;
   return { html, fileName };
@@ -1741,6 +1848,8 @@ const HELP_EDITOR=[
   ["📷","add or replace the screenshot with an image file"],
   ["⧉","duplicate the step"],
   ["✕","delete the step"],
+  ["🎙 Record voice-over","record narration for this step from your mic — viewers get a ▶ play button on the published step"],
+  ["🎬 Paste a YouTube link","attach a “watch this for more info” video to the step (or a Tip) — it shows as a thumbnail with a play button"],
   ["+ Step · 📖 Chapter","the faint dashed bars between cards insert right at that spot"],
   ["group","On the screenshot"],
   ["🎯 Add circle","a click-here ring — drag it into place"],
