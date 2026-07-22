@@ -26,5 +26,18 @@ jobs:
           git config user.name "guide-indexer"
           git config user.email "actions@users.noreply.github.com"
           git add guides.json
-          git diff --cached --quiet || git commit -m "Auto-update guide index"
-          git push
+          # Nothing changed? Then there's nothing to do.
+          if git diff --cached --quiet; then
+            echo "guides.json unchanged — nothing to commit."
+            exit 0
+          fi
+          git commit -m "Auto-update guide index"
+          # Push, but tolerate a concurrent push (e.g. two guides uploaded close
+          # together): rebase on the latest main and retry a few times.
+          for attempt in 1 2 3 4 5; do
+            if git push; then exit 0; fi
+            echo "Push rejected (attempt $attempt) — rebasing on latest main and retrying."
+            git pull --rebase --autostash origin main || true
+          done
+          echo "Could not push the updated index after several retries." >&2
+          exit 1
