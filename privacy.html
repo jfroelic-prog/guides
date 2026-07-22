@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>StepSnap — Privacy Policy</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<!-- Keeps this page off the homepage guide grid (see build_index.py). -->
+<meta name="stepsnap-unlisted" content="1">
+<style>
+  :root{ --font:"Century Gothic",CenturyGothic,"URW Gothic","Avant Garde",Futura,"Trebuchet MS",sans-serif; }
+  body{ font:16px/1.65 var(--font); color:#211d17; background:#faf7f0; margin:0; padding:0; }
+  .wrap{ max-width:760px; margin:0 auto; padding:40px 22px 60px; }
+  h1{ font-size:32px; margin:0 0 4px; }
+  .sub{ color:#7c7466; margin:0 0 28px; }
+  h2{ font-size:20px; margin:32px 0 8px; }
+  p,li{ font-size:16px; }
+  ul{ padding-left:20px; }
+  li{ margin:6px 0; }
+  a{ color:#0e6b58; }
+  .box{ background:#eef6f3; border:1px solid #bfe0d6; border-radius:12px; padding:16px 18px; margin:20px 0; }
+  code{ background:#f1ede3; padding:1px 5px; border-radius:5px; font-size:14px; }
+  footer{ margin-top:40px; color:#b6ad9b; font-size:13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>StepSnap — Privacy Policy</h1>
+  <p class="sub">Last updated: July 22, 2026</p>
+
+  <p>StepSnap is a free, self-hosted tool for turning your clicks into
+  step-by-step how-to guides. This policy explains what the StepSnap browser
+  extension does with your data. In short: <strong>the extension keeps your data
+  on your own computer and only sends it to a destination you choose and
+  control.</strong> There is no StepSnap company server, and nothing is sent to
+  the developer.</p>
+
+  <div class="box">
+    <strong>The one-sentence version:</strong> the extension records screenshots
+    locally in your browser, and the only time it sends anything over the network
+    is when <em>you</em> click “Push draft,” at which point your guide is uploaded
+    to the GitHub repository you set up, using the access key you provided.
+  </div>
+
+  <h2>What the extension handles</h2>
+  <ul>
+    <li><strong>Screenshots and step text.</strong> While you are recording, the
+    extension captures screenshots of the tab you are recording and writes short
+    descriptions of what you clicked. These are stored locally in your browser
+    (<code>chrome.storage.local</code>) until you delete them or push a draft.</li>
+    <li><strong>Your publishing key.</strong> If you set up publishing, the
+    GitHub access token you paste is stored locally in your browser and is used
+    only to communicate with GitHub’s API on your behalf. It is never sent
+    anywhere else.</li>
+    <li><strong>Your name (optional).</strong> If you enter a “Made by” name, it
+    is stored locally and included in the guides you publish.</li>
+  </ul>
+
+  <h2>What the extension sends, and where</h2>
+  <ul>
+    <li><strong>To GitHub — only when you choose to publish.</strong> When you
+    push a draft, the guide (its screenshots and text) is uploaded to the GitHub
+    repository you configured, using your own access key. You control that
+    repository and that key.</li>
+    <li><strong>When importing from Scribe.</strong> If you use the Scribe
+    importer, the extension reads the Scribe guide open in your active tab and
+    downloads its screenshots so they can be included in your guide.</li>
+  </ul>
+
+  <h2>What the extension does <em>not</em> do</h2>
+  <ul>
+    <li>It does not send any data to the developer or to any StepSnap server —
+    there is no such server.</li>
+    <li>It does not include analytics, advertising, or tracking of any kind.</li>
+    <li>It does not sell or share your data with third parties.</li>
+    <li>It does not read pages or capture screenshots except while you are
+    actively recording.</li>
+  </ul>
+
+  <h2>Permissions, in plain terms</h2>
+  <ul>
+    <li><strong>Access to websites you record</strong> — so it can capture a
+    screenshot and note your click on whatever page you are documenting.</li>
+    <li><strong>Tabs &amp; scripting</strong> — to know which page each step
+    belongs to and to place the click-recorder into pages you are recording.</li>
+    <li><strong>Storage</strong> — to hold your captured steps and screenshots on
+    your own computer (guides can be large, so extra storage is requested).</li>
+    <li><strong>Side panel</strong> — the recording controls live in the browser
+    side panel.</li>
+  </ul>
+
+  <h2>Your control</h2>
+  <p>Everything the extension stores lives in your browser. You can clear the
+  current steps at any time from the panel, and removing the extension deletes
+  its stored data. Guides you have published live in your own GitHub repository,
+  which you manage directly.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about this policy can be sent to the StepSnap administrator for
+  your team.
+  <!-- Optional: replace the line above with a real contact email if you want
+       one shown, e.g. "…sent to you@example.com". -->
+  </p>
+
+  <footer>StepSnap · self-hosted step-by-step guides</footer>
+</div>
+</body>
+</html>
