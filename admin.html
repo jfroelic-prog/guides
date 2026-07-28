@@ -342,7 +342,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-07-27c"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-07-28a"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -385,8 +385,16 @@ async function decryptToken(encObj, password){
 }
 
 /* ===== GitHub API ===== */
-function gh(path, opts){
-  const [o,r]=splitRepo(REPO);
+// Drafts live in a SEPARATE PRIVATE repo (`<repo>-drafts`), not the public site
+// repo. A draft is a raw capture — its screenshots haven't been blurred yet —
+// so putting it in the public repo exposed it (and left it in public history
+// forever) between "push draft" and "publish". Naming is by convention so
+// nobody has to configure anything; the same team key covers both repos.
+function draftsRepo(){ return REPO + "-drafts"; }
+function isDraftPath(p){ return p==="drafts" || p.indexOf("drafts/")===0; }
+function repoFor(path){ return isDraftPath(path) ? draftsRepo() : REPO; }
+function gh(path, opts, repo){
+  const [o,r]=splitRepo(repo||REPO);
   // cache:"no-store" is IMPORTANT: GitHub answers authenticated GETs with
   // `Cache-Control: private, max-age=60`, so the browser will happily replay a
   // up-to-60-second-old response — including the file's `sha`. A stale sha makes
@@ -416,8 +424,11 @@ function bytesToB64(bytes){
 //      keys that GitHub denies on /git/* endpoints)
 //   4. the live site's own copy, same-origin        (any size; lags a fresh push ~1min)
 // Returns { sha, text, via, tried } — `via` = which method worked, `tried` = failures.
+// Steps 3 and 4 only work for PUBLIC, site-served files, so they're skipped for
+// drafts (private repo, never on the site) — for those, 1 and 2 are the chain.
 async function ghGet(name){
-  const res = await gh(`/contents/${ghPath(name)}?ref=HEAD`);
+  const repo = repoFor(name), priv = isDraftPath(name);
+  const res = await gh(`/contents/${ghPath(name)}?ref=HEAD`, null, repo);
   if(res.status===404) return null;
   if(!res.ok) throw new Error("GitHub "+res.status);
   const j = await res.json();
@@ -426,7 +437,7 @@ async function ghGet(name){
   if(j.content){ try{ text = dec.decode(unb64(j.content.replace(/\s/g,""))); }catch(e){ tried.push("inline decode-fail"); } }
   if(!text && j.sha){
     try{
-      const blob = await gh(`/git/blobs/${j.sha}`);
+      const blob = await gh(`/git/blobs/${j.sha}`, null, repo);
       if(blob.ok){
         const b = await blob.json();
         if(b.content){ text = dec.decode(unb64(b.content.replace(/\s/g,""))); via="blob"; }
@@ -434,9 +445,9 @@ async function ghGet(name){
       } else tried.push("blob "+blob.status);
     }catch(e){ tried.push("blob network-error"); }
   }
-  if(!text && j.sha){
+  if(!text && j.sha && !priv){
     try{
-      const [o,r]=splitRepo(REPO);
+      const [o,r]=splitRepo(repo);
       const blob = await fetch(`${API_BASE}/repos/${o}/${r}/git/blobs/${j.sha}`,
         { headers:{ Accept:"application/vnd.github+json" } });
       if(blob.ok){
@@ -446,7 +457,7 @@ async function ghGet(name){
       } else tried.push("public-blob "+blob.status);
     }catch(e){ tried.push("public-blob network-error"); }
   }
-  if(!text){
+  if(!text && !priv){
     try{
       const r2 = await fetch(siteUrl(name)+"?cb="+Date.now(), { cache:"no-store" });
       if(r2.ok){ text = await r2.text(); via="site"; }
@@ -460,13 +471,13 @@ async function ghGet(name){
 async function ghPut(name, content, sha, message){
   const body = { message: message||("Update "+name), content: bytesToB64(enc.encode(content)) };
   if(sha) body.sha = sha;
-  const res = await gh(`/contents/${ghPath(name)}`, { method:"PUT", body:JSON.stringify(body) });
+  const res = await gh(`/contents/${ghPath(name)}`, { method:"PUT", body:JSON.stringify(body) }, repoFor(name));
   if(!res.ok) throw new Error("GitHub "+res.status+": "+(await res.text()).slice(0,120));
   return res.json();
 }
 async function ghDelete(name, sha, message){
   const res = await gh(`/contents/${ghPath(name)}`, { method:"DELETE",
-    body: JSON.stringify({ message: message||("Remove "+name), sha }) });
+    body: JSON.stringify({ message: message||("Remove "+name), sha }) }, repoFor(name));
   if(!res.ok) throw new Error("GitHub "+res.status+": "+(await res.text()).slice(0,120));
   return res.json();
 }
@@ -1888,7 +1899,7 @@ async function edPublish(){
 async function loadDrafts(){
   const host=$("draftList");
   try{
-    const res=await gh(`/contents/drafts`);
+    const res=await gh(`/contents/drafts`, null, draftsRepo());
     if(res.status===404){ host.innerHTML='<span class="note">No drafts yet. In the extension editor, click <b>📤 Push draft</b> to send one here.</span>'; return; }
     if(!res.ok) throw new Error("GitHub "+res.status);
     const items=await res.json();
