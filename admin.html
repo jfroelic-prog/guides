@@ -1,0 +1,2063 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>StepSnap — Site Admin</title>
+<style>
+  :root{ --paper:#f7f2e9; --card:#fffdf8; --ink:#211d17; --muted:#7c7466;
+    --line:#e6decd; --accent:#d23f31; --teal:#0e6b58; --gold:#c79a3b;
+    --font:"Century Gothic",CenturyGothic,"URW Gothic","Avant Garde",Futura,"Trebuchet MS",sans-serif; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--paper); color:var(--ink); font:15px/1.5 var(--font);
+    background-image:radial-gradient(rgba(120,100,60,.05) 1px, transparent 1px); background-size:22px 22px; }
+  a{ color:var(--teal); }
+  main{ max-width:920px; margin:0 auto; padding:34px 22px 90px; }
+  h1{ font-size:26px; margin:0; } h1 span{ color:var(--accent); }
+  h2{ font-size:15px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); margin:30px 0 12px; }
+  .btn{ border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:8px;
+    padding:8px 13px; font:600 13px var(--font); cursor:pointer; transition:.12s; }
+  .btn:hover{ border-color:var(--gold); }
+  .btn.primary{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  .btn.danger{ color:var(--accent); border-color:#e7c7c2; }
+  .btn.danger:hover{ background:var(--accent); color:#fff; border-color:var(--accent); }
+  .btn.tiny{ padding:4px 8px; font-size:11.5px; }
+  input{ font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:8px;
+    background:var(--card); outline:none; width:100%; }
+  input:focus{ border-color:var(--teal); }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px;
+    box-shadow:0 8px 24px -18px rgba(60,45,20,.35); }
+
+  /* login / setup */
+  #gate{ max-width:420px; margin:9vh auto 0; }
+  #gate h1{ margin-bottom:4px; } #gate p{ color:var(--muted); margin:2px 0 18px; font-size:13.5px; }
+  #gate label{ display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
+  #gate .btn{ margin-top:16px; } .err{ color:var(--accent); font-size:13px; margin-top:10px; min-height:18px; }
+
+  /* topbar */
+  .top{ display:flex; align-items:center; gap:10px; margin-bottom:6px; flex-wrap:wrap; }
+  .top .sp{ flex:1; }
+  .sub{ color:var(--muted); margin:0 0 8px; font-size:13px; }
+
+  /* metrics */
+  .metrics{ display:flex; gap:14px; flex-wrap:wrap; margin-bottom:6px; }
+  .stat{ flex:1; min-width:150px; text-align:center; }
+  .stat .n{ font-size:30px; font-weight:700; } .stat .l{ font-size:12px; color:var(--muted); }
+  .bars{ margin-top:6px; } .bar{ display:flex; align-items:center; gap:10px; margin:6px 0; font-size:13px; }
+  .bar .t{ flex:none; width:46%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .bar .track{ flex:1; height:12px; background:#efe7d6; border-radius:6px; overflow:hidden; }
+  .bar .fill{ height:100%; background:linear-gradient(90deg,var(--teal),#1c8a72); }
+  .bar .v{ flex:none; width:54px; text-align:right; color:var(--muted); }
+
+  /* guide rows */
+  .row{ display:flex; align-items:center; gap:12px; padding:11px 4px; border-bottom:1px dashed var(--line); }
+  .row .ord{ display:flex; flex-direction:column; gap:1px; }
+  .row .ord button{ border:0; background:transparent; cursor:pointer; font-size:12px; color:var(--muted); line-height:1; padding:1px 3px; }
+  .row .star{ border:0; background:transparent; cursor:pointer; font-size:16px; line-height:1; }
+  .row .info{ flex:1; min-width:0; }
+  .row .info b{ display:block; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row .info span{ font-size:11.5px; color:var(--muted); }
+  .row .info i{ font-style:normal; color:var(--gold); }
+  .row .acts{ display:flex; flex-wrap:wrap; gap:4px; justify-content:flex-end; max-width:300px; }
+  .pill{ display:inline-block; background:#f1ece0; border-radius:999px; padding:1px 8px; font-size:11px; }
+  /* collections manager */
+  .collbox{ border:1px solid var(--line); border-radius:12px; padding:14px 15px; margin:0 0 14px; }
+  .collbox input[type=text]{ width:100%; margin:0 0 8px; }
+  .colllink{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:2px 0 8px; }
+  .colllink input{ flex:1; min-width:180px; font-size:12px; color:var(--muted); background:#f7f4ec; }
+  .collpicks{ display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:2px 14px;
+    margin-top:8px; border-top:1px dashed var(--line); padding-top:10px; }
+  .collpicks label{ display:flex; align-items:center; gap:6px; font-size:13px; padding:2px 0; }
+  .collpicks input{ width:auto; }
+  .hidden{ display:none !important; }
+  .note{ font-size:12.5px; color:var(--muted); }
+  .health-issue{ color:var(--accent); } .health-ok{ color:var(--teal); }
+  .saved{ font-size:12px; color:var(--muted); margin-left:8px; }
+
+  /* ===== web editor ===== */
+  #editor{ max-width:820px; margin:0 auto; padding:28px 22px 90px; }
+  #editor .gmeta{ margin-bottom:14px; }
+  #edTitle{ font-size:22px; font-weight:700; border:0; border-bottom:2px solid var(--line);
+    border-radius:0; padding:6px 2px; background:transparent; }
+  #edTitle:focus{ border-color:var(--teal); }
+  #edDesc, #edAuthor{ margin-top:8px; }
+  #editor .unlisted{ display:flex; align-items:center; gap:7px; margin-top:10px; font-size:13px; color:var(--muted); }
+  #editor .unlisted input{ width:auto; }
+  .estep{ background:var(--card); border:1px solid var(--line); border-radius:12px; margin:14px 0;
+    box-shadow:0 8px 24px -18px rgba(60,45,20,.3); overflow:hidden; }
+  .estep.chapter{ background:#f4efe4; border-style:dashed; }
+  .estep.callout.tip{ background:#eef6f3; border-color:#bfe0d6; }
+  .estep.callout.alert{ background:#fdeceb; border-color:#f1bdb6; }
+  .estep.callout.warning{ background:#fbf4e2; border-color:#ecdca6; }
+  /* Grid, not flex: row 1 is checkbox | number | title | tools, and the detail
+     text sits on row 2 spanning the title+tools columns — so it stays aligned
+     under the title but gets the card's full width to wrap in. */
+  .estep .ehead{ display:grid; grid-template-columns:auto auto minmax(0,1fr) auto;
+    gap:4px 11px; padding:13px 15px; align-items:start; }
+  .estep .edescrow{ grid-column:3 / -1; min-width:0; }
+  .estep .enum{ flex:none; width:28px; height:28px; border-radius:50%; background:var(--accent); color:#fff;
+    display:grid; place-items:center; font-weight:700; font-size:13px; cursor:grab; user-select:none; margin-top:2px; }
+  .estep.chapter .enum{ background:var(--gold); } .estep.callout .enum{ background:var(--teal); }
+  .estep .efields{ flex:1; min-width:0; }
+  .estep .etitle{ font-weight:700; border:0; border-bottom:1px solid transparent; border-radius:0; padding:4px 2px; }
+  .estep .etitle:hover{ border-bottom-color:var(--line); } .estep .etitle:focus{ border-bottom-color:var(--teal); }
+  /* width:100% matters — a <textarea> with no width falls back to its cols=20
+     default (~300px), so the detail text wrapped in a narrow column while the
+     title <input> beside it filled the card (inputs get width:100% above). */
+  .estep .edesc{ border:0; border-bottom:1px solid transparent; border-radius:0; padding:4px 2px; margin-top:2px;
+    width:100%; resize:none; overflow:hidden; font:13.5px/1.5 var(--font); color:var(--muted); background:transparent; }
+  .estep .edesc:hover{ border-bottom-color:var(--line); } .estep .edesc:focus{ border-bottom-color:var(--teal); color:var(--ink); }
+  .estep .etools{ display:flex; flex-wrap:wrap; gap:4px; align-items:center; justify-content:flex-end; }
+  .estep .type-sel{ width:auto; padding:5px 6px; font-size:12px; }
+  .ibtn{ border:1px solid var(--line); background:var(--card); border-radius:7px; width:30px; height:30px;
+    cursor:pointer; font-size:13px; line-height:1; padding:0; }
+  .ibtn:hover{ border-color:var(--gold); } .ibtn.danger{ color:var(--accent); border-color:#e7c7c2; }
+  .shotwrap{ position:relative; margin:0 15px 12px; }
+  .shotwrap img{ display:block; width:100%; border-radius:8px; border:1px solid var(--line); }
+  /* click targets: any number per step, each its own colour + shape.
+     Drag one to move it; hover/select shows its ✕. Selection = soft halo. */
+  .shotwrap .tgt{ position:absolute; border:3px solid #f97316; cursor:move; }
+  .shotwrap .tgt.circle{ transform:translate(-50%,-50%); border-radius:50%; aspect-ratio:1; }
+  .shotwrap .tgt.box{ border-radius:6px; }
+  .shotwrap .tgt.sel{ box-shadow:0 0 10px 1px rgba(33,29,23,.45); }
+  .shotwrap .tgt .tx{ position:absolute; top:-11px; right:-11px; width:20px; height:20px;
+    border-radius:50%; border:0; background:#211d17; color:#fff; font-size:11px; line-height:20px;
+    padding:0; cursor:pointer; display:none; box-shadow:0 1px 4px rgba(0,0,0,.35); }
+  .shotwrap .tgt.circle .tx{ top:-8px; right:auto; left:calc(100% - 12px); }
+  .shotwrap .tgt:hover .tx, .shotwrap .tgt.sel .tx{ display:block; }
+  /* corner resize handle on the selected target */
+  .shotwrap .tgt .rz{ position:absolute; right:-8px; bottom:-8px; width:14px; height:14px;
+    background:#fff; border:2px solid #211d17; border-radius:4px; cursor:nwse-resize; display:none; }
+  .shotwrap .tgt.sel .rz{ display:block; }
+  /* arrows: the element IS the shaft (rotated line); .ah is the head; the
+     handle sits at the tip and drags it */
+  .shotwrap{ container-type:inline-size; }
+  .shotwrap .tgt.arrow{ border:none; height:0; border-top:3px solid; border-radius:0; }
+  .shotwrap .tgt.arrow .ah{ position:absolute; right:-2px; top:-7.5px; width:0; height:0;
+    border-top:6px solid transparent; border-bottom:6px solid transparent; border-left:12px solid; }
+  .shotwrap .tgt.arrow .tx{ left:-11px; right:auto; top:-12px; }
+  .shotwrap .tgt.arrow .rz{ right:-9px; bottom:auto; top:-8px; cursor:crosshair; }
+  .arrowpreview{ position:absolute; height:0; border-top:2.5px dashed var(--teal);
+    transform-origin:0 50%; pointer-events:none; }
+  /* labels: a colored text pill; font scales with the screenshot via cqw */
+  .shotwrap .tgt.label{ border:none; border-radius:.5em; color:#fff; padding:.32em .6em;
+    font:700 2.8cqw var(--font); line-height:1.25; white-space:pre-wrap; max-width:60%; cursor:move; }
+  .shotwrap.aim{ cursor:crosshair; }
+  .shot-tools input[type=color]{ width:30px; height:26px; padding:1px; border:1px solid var(--line);
+    border-radius:6px; background:var(--card); cursor:pointer; }
+  .shot-tools .ltinp{ width:150px; padding:5px 8px; font-size:12.5px; }
+
+  /* ❓ help overlay: a legend of every icon/button, per screen */
+  #helpOv{ position:fixed; inset:0; z-index:80; background:rgba(33,29,23,.45);
+    display:flex; align-items:flex-start; justify-content:center; padding:5vh 16px; }
+  #helpOv.hidden{ display:none; }
+  .helpcard{ background:var(--card); border:1px solid var(--line); border-radius:16px;
+    box-shadow:0 18px 50px -20px rgba(0,0,0,.5); max-width:560px; width:100%;
+    max-height:88vh; display:flex; flex-direction:column; }
+  .helphead{ display:flex; align-items:center; gap:8px; padding:14px 18px;
+    border-bottom:1px solid var(--line); }
+  .helphead b{ flex:1; font-size:16px; }
+  #helpBody{ overflow:auto; padding:10px 18px 16px; }
+  .hrow{ display:flex; gap:12px; padding:7px 0; border-bottom:1px dashed #efe9db; font-size:13.5px; }
+  .hrow:last-child{ border-bottom:0; }
+  .hrow b{ flex:none; width:120px; font-weight:700; }
+  .hrow span{ color:#5c5346; }
+  .hgroup{ margin:12px 0 2px; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+
+  /* insert bars: quiet dashed dividers between cards that offer "+ Step / Chapter" */
+  .insbar{ display:flex; justify-content:center; align-items:center; position:relative;
+    height:22px; margin:-4px 0; opacity:.35; transition:opacity .12s; }
+  .insbar:hover{ opacity:1; }
+  .insbar::before{ content:""; position:absolute; left:8px; right:8px; top:50%;
+    border-top:1px dashed var(--line); }
+  .insbtns{ position:relative; display:flex; gap:6px; background:var(--paper); padding:0 6px; }
+  .insbtns button{ border:1px solid var(--line); background:var(--card); border-radius:999px;
+    padding:2px 10px; font:600 11.5px var(--font); cursor:pointer; color:var(--muted); }
+  .insbtns button:hover{ border-color:var(--teal); color:var(--ink); }
+  .dis{ opacity:.35; pointer-events:none; }
+  .shot-tools{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:0 15px 14px; font-size:12.5px; color:var(--muted); }
+  .shot-tools label{ display:flex; align-items:center; gap:5px; } .shot-tools input[type=checkbox]{ width:auto; }
+  .shot-tools input[type=range]{ width:120px; padding:0; }
+  .noshot{ padding:0 15px 14px; }
+
+  /* blur tool (drag boxes over sensitive info; baked in on publish) */
+  .blurbox{ position:absolute; backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+            background:rgba(200,195,185,.25); border:1px dashed transparent; }
+  .shotwrap.blurmode{ cursor:cell; }
+  .shotwrap.blurmode .blurbox{ border-color:var(--teal); }
+  .blurbox .rmblur{ position:absolute; top:-9px; right:-9px; width:18px; height:18px;
+       border-radius:50%; border:0; background:var(--teal); color:#fff; font-size:11px;
+       line-height:18px; padding:0; cursor:pointer; display:none; }
+  .shotwrap.blurmode .blurbox .rmblur{ display:block; }
+  .blurpreview{ position:absolute; border:1.5px dashed var(--teal); background:rgba(14,107,88,.12);
+                pointer-events:none; }
+  .modebtn{ border:1px solid var(--line); background:var(--card); border-radius:6px;
+            padding:3px 9px; cursor:pointer; font:600 12px var(--font); color:var(--ink); }
+  .modebtn.on{ background:var(--teal); color:#fff; border-color:var(--teal); }
+  .shot-tools .hint{ margin-left:auto; font-style:italic; }
+
+  /* multi-select: a checkbox on every card; selecting shows the bottom bar */
+  .estep .sel-check{ display:grid; place-items:center; flex:none; width:30px; height:30px; margin-top:2px; }
+  .estep .sel-check input{ width:18px; height:18px; accent-color:var(--teal); cursor:pointer; }
+  .estep.selected{ outline:2px solid var(--teal); outline-offset:2px; }
+  #gifBar{ display:none; position:fixed; bottom:0; left:0; right:0; z-index:60;
+    background:var(--ink); color:var(--paper); padding:12px 22px; gap:12px;
+    align-items:center; flex-wrap:wrap; box-shadow:0 -10px 28px -16px rgba(0,0,0,.5); }
+  #gifBar.show{ display:flex; }
+  #gifBar b{ font-size:14px; }
+  #gifBar .spacer{ flex:1; min-width:10px; }
+  #gifBar label{ display:flex; align-items:center; gap:8px; font-size:13px; color:#e9e2d2; }
+  #gifBar input[type=range]{ accent-color:var(--gold); width:120px; }
+  #gifBar .btn{ background:transparent; color:var(--paper); border-color:#5a5246; }
+  #gifBar .btn.go{ background:var(--teal); border-color:var(--teal); color:#fff; }
+  #gifBar .btn.danger{ background:transparent; border-color:#7a4a44; color:#f3b0a8; }
+  #gifBar .btn.danger:hover{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  #gifBar .btn[disabled]{ opacity:.4; cursor:not-allowed; }
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN / SETUP ============ -->
+<div id="gate" class="card">
+  <h1>Step<span>Snap</span> Admin</h1>
+  <!-- first-time setup (no key stored on this device yet) -->
+  <div id="setup" class="hidden">
+    <p>First time on this computer — connect it once. Your key is encrypted with your
+       password and stored only in this browser.</p>
+    <label>Team key (GitHub token)</label>
+    <input id="suToken" type="password" placeholder="github_pat_… or ghp_…">
+    <label>Repository (owner/name)</label>
+    <input id="suRepo" value="jfroelic-prog/guides">
+    <label>Choose a password (you’ll use this to log in here)</label>
+    <input id="suPass" type="password" placeholder="a strong password">
+    <label>Confirm password</label>
+    <input id="suPass2" type="password" placeholder="repeat it">
+    <button class="btn primary" id="suGo">Connect this device</button>
+    <div class="err" id="suErr"></div>
+  </div>
+  <!-- normal login (key already stored, locked by password) -->
+  <div id="login" class="hidden">
+    <p>Enter your password to unlock the admin tools.</p>
+    <label>Password</label>
+    <input id="liPass" type="password" placeholder="your password" autofocus>
+    <button class="btn primary" id="liGo">Log in</button>
+    <div class="err" id="liErr"></div>
+    <p class="note" style="margin-top:14px">
+      Forgot it, or new key? <a href="#" id="forget">Reset this device</a>
+      (re-enter the team key).</p>
+  </div>
+  <p class="note" style="margin-top:16px">🎓 New here? <a href="tutorial.html" target="_blank" rel="noopener">Open the step-by-step tutorial</a> — it walks the whole journey.</p>
+  <p class="note" id="gateBuild" style="margin-top:8px"></p>
+</div>
+
+<!-- ============ APP ============ -->
+<main id="app" class="hidden">
+  <div class="top">
+    <h1>Step<span>Snap</span> Site Admin</h1>
+    <span class="sp"></span>
+    <span class="saved" id="status"></span>
+    <button class="btn tiny" id="helpAdminBtn" title="What does every button do?">❓</button>
+    <a class="btn tiny" href="tutorial.html" target="_blank" rel="noopener" style="text-decoration:none" title="The full walkthrough, start to finish">🎓 Tutorial</a>
+    <button class="btn tiny" id="refresh">↻ Refresh</button>
+    <button class="btn tiny" id="lock">🔒 Lock</button>
+  </div>
+  <p class="sub" id="siteLine"></p>
+
+  <h2>📊 Metrics</h2>
+  <div class="card">
+    <div class="metrics">
+      <div class="stat"><div class="n" id="mGuides">—</div><div class="l">guides live</div></div>
+      <div class="stat"><div class="n" id="mViews">—</div><div class="l">total views</div></div>
+      <div class="stat"><div class="n" id="mUnlisted">—</div><div class="l">unlisted</div></div>
+    </div>
+    <div class="bars" id="popBars"></div>
+  </div>
+
+  <h2>📥 Drafts <span class="note">— pushed from the extension; open one to finish &amp; publish it</span></h2>
+  <div class="card" id="draftList"><span class="note">Loading…</span></div>
+
+  <h2>🗂 Guides <span class="note">— drag order with ↑/↓, ⭐ to feature, then <button class="btn tiny" id="saveLayout">Save layout</button></span></h2>
+  <div class="card" id="guideList"></div>
+
+  <h2>🏷️ Collections <span class="note">— group guides and share one link; the guides stay on the main site too</span></h2>
+  <div class="card" id="collList"></div>
+
+  <h2>🩺 Health check <button class="btn tiny" id="runHealth">Run check</button></h2>
+  <div class="card"><div id="healthOut" class="note">Checks each live guide for editable data, screenshots, and the view-counter ping.</div></div>
+</main>
+
+<!-- ============ WEB EDITOR ============ -->
+<div id="editor" class="hidden">
+  <div class="top">
+    <h1>Edit guide</h1>
+    <span class="sp"></span>
+    <span class="saved" id="edStatus"></span>
+    <button class="btn tiny" id="edBack">← Back to admin</button>
+    <button class="btn tiny" id="edUndoBtn" title="Undo the last edit (Cmd/Ctrl+Z)">↩ Undo</button>
+    <button class="btn tiny" id="edCopyBtn" title="Copy the whole guide — paste into Gmail, Google Docs, or Word">📋 Copy guide</button>
+    <button class="btn tiny" id="edMdBtn" title="Download the guide as a Markdown file">⬇ Markdown</button>
+    <button class="btn tiny" id="helpEdBtn" title="What does every button do?">❓</button>
+    <button class="btn tiny" id="edSaveBtn" title="Save your progress as a draft — doesn't publish; reopen later from 📥 Drafts">💾 Save draft</button>
+    <button class="btn primary tiny" id="edPublish">🚀 Publish</button>
+  </div>
+  <p class="sub" id="edWhere"></p>
+  <div class="card gmeta">
+    <input id="edTitle" placeholder="Guide title">
+    <input id="edDesc" placeholder="Short description (optional)">
+    <input id="edAuthor" placeholder="Made by (your name)">
+    <label class="unlisted"><input type="checkbox" id="edUnlisted"> 🙈 Unlisted — keep the link but hide it from the homepage</label>
+  </div>
+  <div id="edSteps"></div>
+  <div style="text-align:center; margin:18px 0">
+    <button class="btn" id="edAddStep">+ Add step</button>
+    <button class="btn" id="edAddChapter">📖 + Add chapter heading</button>
+  </div>
+
+  <!-- selection action bar (appears when you tick step checkboxes) -->
+  <div id="gifBar">
+    <b id="gifCount">0 selected</b>
+    <span class="spacer"></span>
+    <label>🎞 GIF speed <input type="range" id="gifSpeed" min="500" max="6000" step="100" value="2000">
+      <span id="gifSpeedVal">2.0s</span></label>
+    <button class="btn go" id="gifCombine" disabled title="Combine the selected steps into ONE animated step">🔗 Combine into GIF</button>
+    <button class="btn" id="gifCreate" disabled title="Add the animation as a NEW step (keeps the selected ones)">➕ Add GIF as step</button>
+    <button class="btn danger" id="selDelete" disabled title="Delete the selected steps">🗑 Delete selected</button>
+    <button class="btn" id="gifCancel">✕ Clear</button>
+  </div>
+</div>
+
+<!-- ============ ❓ HELP OVERLAY ============ -->
+<div id="helpOv" class="hidden">
+  <div class="helpcard">
+    <div class="helphead">
+      <b id="helpTitle">What everything does</b>
+      <a class="btn tiny" href="tutorial.html" target="_blank" rel="noopener" style="text-decoration:none">🎓 Full tutorial</a>
+      <button class="btn tiny" id="helpClose">✕ Close</button>
+    </div>
+    <div id="helpBody"></div>
+  </div>
+</div>
+
+<script src="gif.js"></script>
+<script>
+/* ===== config ===== */
+const ADMIN_BUILD = "2026-07-27c"; // shown in the UI so a stale cached copy is instantly recognizable
+const API_BASE = "https://api.github.com";
+const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
+const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
+
+let TOKEN = "";      // decrypted in memory after login
+let REPO = "jfroelic-prog/guides";
+let GUIDES = [];     // current live guides
+let ORDER = { order: [], featured: [] };
+let orderSha = null; // sha of order.json (for updates)
+let COLLECTIONS = []; // [{id,title,desc,guides:[file,…]}] — grouped guides
+let collectionsSha = null; // sha of collections.json (for updates)
+
+/* ===== tiny helpers ===== */
+const $ = (id) => document.getElementById(id);
+const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const enc = new TextEncoder(), dec = new TextDecoder();
+function status(t){ $("status").textContent = t || ""; if(t) setTimeout(()=>{ if($("status").textContent===t) $("status").textContent=""; }, 4000); }
+function splitRepo(r){ const i=r.indexOf("/"); return [r.slice(0,i), r.slice(i+1)]; }
+function siteUrl(file){ const [o,r]=splitRepo(REPO); return `https://${o}.github.io/${r}/${ghPath(file)}`; }
+
+/* ===== password crypto (AES-GCM key derived from password via PBKDF2) ===== */
+async function deriveKey(password, salt){
+  const base = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey(
+    { name:"PBKDF2", salt, iterations:200000, hash:"SHA-256" },
+    base, { name:"AES-GCM", length:256 }, false, ["encrypt","decrypt"]);
+}
+async function encryptToken(token, password){
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKey(password, salt);
+  const ct = await crypto.subtle.encrypt({ name:"AES-GCM", iv }, key, enc.encode(token));
+  return { salt:b64(salt), iv:b64(iv), ct:b64(ct) };
+}
+async function decryptToken(encObj, password){
+  const key = await deriveKey(password, unb64(encObj.salt));
+  const pt = await crypto.subtle.decrypt({ name:"AES-GCM", iv:unb64(encObj.iv) }, key, unb64(encObj.ct));
+  return dec.decode(pt);
+}
+
+/* ===== GitHub API ===== */
+function gh(path, opts){
+  const [o,r]=splitRepo(REPO);
+  // cache:"no-store" is IMPORTANT: GitHub answers authenticated GETs with
+  // `Cache-Control: private, max-age=60`, so the browser will happily replay a
+  // up-to-60-second-old response — including the file's `sha`. A stale sha makes
+  // the next write fail with "409 … does not match <sha>" (hit in the wild right
+  // after 💾 Save draft, which changes the draft's sha, then 🚀 Publish).
+  return fetch(`${API_BASE}/repos/${o}/${r}${path}`, {
+    ...opts, cache:"no-store", headers:{ Authorization:"Bearer "+TOKEN, Accept:"application/vnd.github+json",
+      ...(opts&&opts.body?{"Content-Type":"application/json"}:{}) , ...(opts&&opts.headers||{}) } });
+}
+// Encode a repo path (keeps "/" so drafts/foo.html resolves into the subfolder).
+function ghPath(name){ return name.split("/").map(encodeURIComponent).join("/"); }
+// Base64-encode bytes in chunks — spreading a whole big array into
+// String.fromCharCode(...) blows the call stack on multi-MB guides.
+function bytesToB64(bytes){
+  let bin=""; const CH=0x8000;
+  for(let i=0;i<bytes.length;i+=CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i+CH));
+  return btoa(bin);
+}
+// Read a repo file. Files over ~1MB return EMPTY inline content from the
+// contents API (encoding "none"), and our guides embed screenshots so they
+// routinely exceed that — so this walks a chain of fallbacks until one yields
+// the text. (The "raw" media type is NOT in the chain: cross-origin in a
+// browser it returns a truncated ~900-byte stub even though curl gets the file.)
+//   1. inline base64 from the contents API          (<1MB files)
+//   2. Git blobs API with the team key              (base64 JSON, CORS-safe, ≤100MB)
+//   3. Git blobs API WITHOUT auth                   (public repo; covers fine-grained
+//      keys that GitHub denies on /git/* endpoints)
+//   4. the live site's own copy, same-origin        (any size; lags a fresh push ~1min)
+// Returns { sha, text, via, tried } — `via` = which method worked, `tried` = failures.
+async function ghGet(name){
+  const res = await gh(`/contents/${ghPath(name)}?ref=HEAD`);
+  if(res.status===404) return null;
+  if(!res.ok) throw new Error("GitHub "+res.status);
+  const j = await res.json();
+  const tried = [];
+  let text="", via="inline";
+  if(j.content){ try{ text = dec.decode(unb64(j.content.replace(/\s/g,""))); }catch(e){ tried.push("inline decode-fail"); } }
+  if(!text && j.sha){
+    try{
+      const blob = await gh(`/git/blobs/${j.sha}`);
+      if(blob.ok){
+        const b = await blob.json();
+        if(b.content){ text = dec.decode(unb64(b.content.replace(/\s/g,""))); via="blob"; }
+        else tried.push("blob empty");
+      } else tried.push("blob "+blob.status);
+    }catch(e){ tried.push("blob network-error"); }
+  }
+  if(!text && j.sha){
+    try{
+      const [o,r]=splitRepo(REPO);
+      const blob = await fetch(`${API_BASE}/repos/${o}/${r}/git/blobs/${j.sha}`,
+        { headers:{ Accept:"application/vnd.github+json" } });
+      if(blob.ok){
+        const b = await blob.json();
+        if(b.content){ text = dec.decode(unb64(b.content.replace(/\s/g,""))); via="blob-public"; }
+        else tried.push("public-blob empty");
+      } else tried.push("public-blob "+blob.status);
+    }catch(e){ tried.push("public-blob network-error"); }
+  }
+  if(!text){
+    try{
+      const r2 = await fetch(siteUrl(name)+"?cb="+Date.now(), { cache:"no-store" });
+      if(r2.ok){ text = await r2.text(); via="site"; }
+      else tried.push("site "+r2.status);
+    }catch(e){ tried.push("site network-error"); }
+  }
+  if(!text) console.warn("[StepSnap admin "+ADMIN_BUILD+"] couldn't read "+name+" — tried: "+tried.join(", "));
+  else if(via!=="inline") console.log("[StepSnap admin "+ADMIN_BUILD+"] read "+name+" via "+via);
+  return { sha:j.sha, text, via, tried };
+}
+async function ghPut(name, content, sha, message){
+  const body = { message: message||("Update "+name), content: bytesToB64(enc.encode(content)) };
+  if(sha) body.sha = sha;
+  const res = await gh(`/contents/${ghPath(name)}`, { method:"PUT", body:JSON.stringify(body) });
+  if(!res.ok) throw new Error("GitHub "+res.status+": "+(await res.text()).slice(0,120));
+  return res.json();
+}
+async function ghDelete(name, sha, message){
+  const res = await gh(`/contents/${ghPath(name)}`, { method:"DELETE",
+    body: JSON.stringify({ message: message||("Remove "+name), sha }) });
+  if(!res.ok) throw new Error("GitHub "+res.status+": "+(await res.text()).slice(0,120));
+  return res.json();
+}
+
+/* ===== load everything ===== */
+async function loadAll(){
+  status("Loading…");
+  const [o,r]=splitRepo(REPO);
+  $("siteLine").innerHTML = `Managing <a href="https://${o}.github.io/${r}/" target="_blank">${o}.github.io/${r}</a> · admin build ${ADMIN_BUILD}`;
+  // repo files
+  const res = await gh(`/contents`);
+  if(res.status===401||res.status===403) throw new Error("auth");
+  if(!res.ok) throw new Error("GitHub "+res.status);
+  const items = await res.json();
+  const files = items.filter(it=>it.type==="file" && /\.html$/i.test(it.name) && !["index.html","admin.html"].includes(it.name.toLowerCase()));
+  // titles/authors from guides.json
+  const metaByFile = {};
+  try{ const gj=await fetch(`https://${o}.github.io/${r}/guides.json?cb=`+Date.now()); if(gj.ok) (await gj.json()).forEach(g=>metaByFile[g.file]=g); }catch(e){}
+  // view counts
+  let counts={}; try{ const c=await fetch(COUNTER_URL+"?action=counts&cb="+Date.now()); if(c.ok) counts=((await c.json()).counts)||{}; }catch(e){}
+  // order.json
+  ORDER = { order:[], featured:[] }; orderSha=null;
+  try{ const od=await ghGet("order.json"); if(od){ orderSha=od.sha; const j=JSON.parse(od.text); ORDER.order=j.order||[]; ORDER.featured=j.featured||[]; } }catch(e){}
+  // collections.json
+  COLLECTIONS = []; collectionsSha=null;
+  try{ const cj=await ghGet("collections.json"); if(cj){ collectionsSha=cj.sha; const j=JSON.parse(cj.text); COLLECTIONS = Array.isArray(j.collections)?j.collections:[]; } }catch(e){}
+
+  GUIDES = files.map(f=>{ const g=metaByFile[f.name];
+    return { file:f.name, sha:f.sha, title:(g&&g.title)||f.name, author:(g&&g.author)||"",
+      listed:!!g, views:counts[f.name]||0, featured:ORDER.featured.includes(f.name) }; });
+  // apply saved order (unknown files go to the end, by views)
+  GUIDES.sort((a,b)=>{
+    const ia=ORDER.order.indexOf(a.file), ib=ORDER.order.indexOf(b.file);
+    if(ia>=0&&ib>=0) return ia-ib; if(ia>=0) return -1; if(ib>=0) return 1;
+    return b.views-a.views;
+  });
+  renderMetrics(); renderGuides(); renderCollections(); loadDrafts();
+  status("");
+}
+
+function renderMetrics(){
+  const total = GUIDES.reduce((s,g)=>s+g.views,0);
+  $("mGuides").textContent = GUIDES.length;
+  $("mViews").textContent = total;
+  $("mUnlisted").textContent = GUIDES.filter(g=>!g.listed).length;
+  const top = [...GUIDES].filter(g=>g.views>0).sort((a,b)=>b.views-a.views).slice(0,6);
+  const max = top.length?top[0].views:1;
+  $("popBars").innerHTML = top.length ? "" : '<span class="note">No views recorded yet.</span>';
+  top.forEach(g=>{
+    const row=document.createElement("div"); row.className="bar";
+    const t=document.createElement("div"); t.className="t"; t.textContent=g.title;
+    const track=document.createElement("div"); track.className="track";
+    const fill=document.createElement("div"); fill.className="fill"; fill.style.width=Math.round(g.views/max*100)+"%";
+    track.append(fill);
+    const v=document.createElement("div"); v.className="v"; v.textContent="👁 "+g.views;
+    row.append(t,track,v); $("popBars").append(row);
+  });
+}
+
+function renderGuides(){
+  const list = $("guideList"); list.innerHTML="";
+  if(!GUIDES.length){ list.innerHTML='<span class="note">No guides published yet.</span>'; return; }
+  GUIDES.forEach((g,idx)=>{
+    const row=document.createElement("div"); row.className="row";
+    const ord=document.createElement("div"); ord.className="ord";
+    ord.append(mk("button","↑",()=>moveGuide(idx,-1)), mk("button","↓",()=>moveGuide(idx,1)));
+    const star=mk("button", g.featured?"⭐":"☆", ()=>{ g.featured=!g.featured; renderGuides(); });
+    star.className="star"; star.title="Feature on the homepage";
+    const info=document.createElement("div"); info.className="info";
+    const b=document.createElement("b"); b.textContent=g.title;
+    const s=document.createElement("span");
+    s.innerHTML=(g.views?`👁 ${g.views} · `:"")+(g.author?`by ${escapeHtml(g.author)} · `:"")+escapeHtml(g.file)+(g.listed?"":' · <i>🙈 unlisted</i>');
+    info.append(b,s);
+    const acts=document.createElement("div"); acts.className="acts";
+    acts.append(
+      mkBtn("✏️ Edit", ()=>edOpen(g.file, false)),
+      mkBtn("↗ Open", ()=>window.open(siteUrl(g.file),"_blank")),
+      mkBtn(g.listed?"🙈 Unlist":"👁 List", ()=>act(()=>toggleUnlisted(g))),
+      mkBtn("✎ Rename", ()=>act(()=>renameGuide(g))),
+      mkBtn("🔗 Copy", (btn)=>copyBtn(btn, siteUrl(g.file))),
+      mkBtn("🗑 Remove", ()=>act(()=>removeGuide(g)), true)
+    );
+    row.append(ord, star, info, acts); list.append(row);
+  });
+}
+function mk(tag,txt,fn){ const e=document.createElement(tag); e.textContent=txt; if(fn) e.onclick=()=>fn(); return e; }
+function mkBtn(txt,fn,danger){ const b=document.createElement("button"); b.className="btn tiny"+(danger?" danger":""); b.textContent=txt; b.onclick=()=>fn(b); return b; }
+
+function moveGuide(i,dir){ const j=i+dir; if(j<0||j>=GUIDES.length) return; [GUIDES[i],GUIDES[j]]=[GUIDES[j],GUIDES[i]]; renderGuides(); }
+
+async function act(fn){ try{ const r=await fn(); if(r!==false){ await loadAll(); } }catch(e){ console.error(e); alert("That didn't work.\n\n"+e.message); status(""); } }
+
+async function removeGuide(g){
+  if(!confirm(`Remove "${g.title}" from the live site?\n\nThe website copy is deleted (your library copy, if any, stays).`)) return false;
+  status("Removing…");
+  // Re-fetch the current id right before deleting, so a stale list can't 404.
+  const fresh = await ghGet(g.file);
+  if(!fresh){ alert(`"${g.title}" is already gone from the site. Refreshing the list.`); return; }
+  await ghDelete(g.file, fresh.sha, "Unpublish "+g.file);
+}
+async function renameGuide(g){
+  const base=g.file.replace(/\.html$/i,"");
+  const input=prompt(`Rename "${g.title}".\nNew filename (letters, numbers, hyphens):`, base);
+  if(!input) return false;
+  const slug=(input.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,""))||"guide";
+  const newName=slug+".html"; if(newName===g.file) return false;
+  status("Renaming…");
+  const exist=await ghGet(newName); if(exist && !confirm(`"${newName}" already exists. Replace it?`)) return false;
+  const old=await ghGet(g.file); if(!old){ alert("Original not found."); return false; }
+  // Never rename from an empty read — the copy would be an empty file.
+  if(!old.text){ alert("Couldn't download this guide, so it wasn't renamed.\n\n(tried: "+((old.tried&&old.tried.join(", "))||"none")+")"); return false; }
+  const html=old.text.replace(/("file":")[^"]*(")/, `$1${newName}$2`);
+  await ghPut(newName, html, exist?exist.sha:null, `Rename ${g.file} → ${newName}`);
+  await ghDelete(g.file, old.sha, `Rename: remove ${g.file}`);
+}
+async function toggleUnlisted(g){
+  status("Updating…");
+  const f=await ghGet(g.file); if(!f){ alert("Not found."); return false; }
+  // Never rewrite a guide from an empty read — that would wipe the live file.
+  if(!f.text){ alert("Couldn't download this guide, so nothing was changed.\n\n(tried: "+((f.tried&&f.tried.join(", "))||"none")+")"); return false; }
+  let html=f.text; const isUnlisted=/<meta name="stepsnap-unlisted" content="1">/.test(html);
+  html = isUnlisted
+    ? html.replace(/\s*<meta name="stepsnap-unlisted" content="1">/,"")
+    : html.replace(/(<meta name="generator" content="StepSnap">)/, '<meta name="stepsnap-unlisted" content="1">\n$1');
+  html = html.replace(/("unlisted":)(?:true|false)/, "$1"+(isUnlisted?"false":"true"));
+  await ghPut(g.file, html, f.sha, (isUnlisted?"List ":"Unlist ")+g.file);
+}
+
+/* save the homepage order + featured set into order.json */
+$("saveLayout").onclick = ()=>act(async()=>{
+  status("Saving layout…");
+  const payload={ order:GUIDES.map(g=>g.file), featured:GUIDES.filter(g=>g.featured).map(g=>g.file) };
+  await ghPut("order.json", JSON.stringify(payload,null,1), orderSha, "Update homepage order/featured");
+  status("Layout saved ✓");
+});
+
+/* ===== Collections: group guides + a shareable ?group= link ===== */
+function collSlug(t){ return ((t||"group").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,""))||"group"; }
+function uniqueCollId(base){ const taken=new Set(COLLECTIONS.map(c=>c.id)); let id=base,n=2; while(taken.has(id)) id=base+"-"+(n++); return id; }
+function collGroupUrl(id){ const [o,r]=splitRepo(REPO); return `https://${o}.github.io/${r}/?group=${encodeURIComponent(id)}`; }
+
+function renderCollections(){
+  const host=$("collList"); host.innerHTML="";
+  const bar=document.createElement("div"); bar.style.marginBottom="12px";
+  bar.append(
+    mkBtn("＋ New collection", ()=>{
+      const title=prompt("Name this collection\n(e.g. “Outlook → Gmail migration”):","");
+      if(!title||!title.trim()) return;
+      COLLECTIONS.push({ id:uniqueCollId(collSlug(title)), title:title.trim(), desc:"", guides:[] });
+      renderCollections();
+    }),
+    mkBtn("💾 Save collections", ()=>act(saveCollections))
+  );
+  host.append(bar);
+
+  if(!COLLECTIONS.length){
+    const n=document.createElement("div"); n.className="note";
+    n.textContent="No collections yet. Make one, tick the guides that belong, Save, then share its link.";
+    host.append(n); return;
+  }
+
+  COLLECTIONS.forEach((c,ci)=>{
+    if(!Array.isArray(c.guides)) c.guides=[];
+    const box=document.createElement("div"); box.className="collbox";
+
+    const ti=document.createElement("input"); ti.type="text"; ti.value=c.title||""; ti.placeholder="Collection name";
+    ti.oninput=()=>{ c.title=ti.value; };
+    const de=document.createElement("input"); de.type="text"; de.value=c.desc||""; de.placeholder="Short description (optional)";
+    de.oninput=()=>{ c.desc=de.value; };
+    box.append(ti,de);
+
+    const link=collGroupUrl(c.id);
+    const linkRow=document.createElement("div"); linkRow.className="colllink";
+    const url=document.createElement("input"); url.type="text"; url.readOnly=true; url.value=link;
+    url.onclick=()=>url.select();
+    const count=document.createElement("span"); count.className="pill"; count.textContent=c.guides.length+" guide"+(c.guides.length===1?"":"s");
+    linkRow.append(url,
+      mkBtn("🔗 Copy link",(b)=>copyBtn(b,link)),
+      mkBtn("↗ Open",()=>window.open(link,"_blank")),
+      mkBtn("🗑 Delete",()=>{ if(confirm(`Delete the “${c.title}” collection?\n\nThe guides themselves are NOT deleted — only this grouping.`)){ COLLECTIONS.splice(ci,1); renderCollections(); } },true),
+      count);
+    box.append(linkRow);
+
+    const picks=document.createElement("div"); picks.className="collpicks";
+    GUIDES.forEach(g=>{
+      const lab=document.createElement("label");
+      const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=c.guides.includes(g.file);
+      cb.onchange=()=>{
+        if(cb.checked){ if(!c.guides.includes(g.file)) c.guides.push(g.file); }
+        else c.guides=c.guides.filter(f=>f!==g.file);
+        count.textContent=c.guides.length+" guide"+(c.guides.length===1?"":"s");
+      };
+      lab.append(cb, document.createTextNode(g.title));
+      picks.append(lab);
+    });
+    box.append(picks);
+    host.append(box);
+  });
+}
+
+async function saveCollections(){
+  status("Saving collections…");
+  // Drop any guide files that no longer exist so links never 404.
+  const live=new Set(GUIDES.map(g=>g.file));
+  const clean=COLLECTIONS.map(c=>({ id:c.id, title:(c.title||"").trim()||c.id, desc:(c.desc||"").trim(),
+    guides:(c.guides||[]).filter(f=>live.has(f)) }));
+  await ghPut("collections.json", JSON.stringify({ collections:clean },null,1), collectionsSha, "Update collections");
+  status("Collections saved ✓");
+}
+
+/* health check: fetch each live guide and flag problems */
+$("runHealth").onclick = async ()=>{
+  const out=$("healthOut"); out.innerHTML="Checking…";
+  const lines=[];
+  for(const g of GUIDES){
+    try{
+      const r=await fetch(siteUrl(g.file)+"?cb="+Date.now()); const html=await r.text();
+      const issues=[];
+      if(html.indexOf('id="stepsnap-data"')<0) issues.push("not re-editable (old export)");
+      if(html.indexOf('<img')<0) issues.push("no images");
+      if(html.indexOf('action=hit')<0) issues.push("no view-counter ping");
+      lines.push(`<div class="${issues.length?'health-issue':'health-ok'}">${issues.length?'⚠':'✓'} ${escapeHtml(g.title)}${issues.length?' — '+issues.join(', '):''}</div>`);
+    }catch(e){ lines.push(`<div class="health-issue">⚠ ${escapeHtml(g.title)} — couldn't load</div>`); }
+  }
+  out.innerHTML = lines.join("") || '<span class="note">No guides to check.</span>';
+};
+
+async function copyBtn(btn, text){
+  const label=btn.textContent; let ok=false;
+  try{ await navigator.clipboard.writeText(text); ok=true; }catch(e){
+    try{ const ta=document.createElement("textarea"); ta.value=text; document.body.append(ta); ta.select(); ok=document.execCommand("copy"); ta.remove(); }catch(e2){}
+  }
+  btn.textContent=ok?"✓":"copy?"; setTimeout(()=>btn.textContent=label,1200);
+}
+function escapeHtml(t){ return (t||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+/* ===================================================================
+   WEB EDITOR — the extension's editing capabilities, in the browser.
+   Loads a guide's embedded editable model (from a draft or a live page),
+   lets you edit text/structure/highlights, then rebuilds + publishes it.
+   =================================================================== */
+let ED = null; // the guide being edited: {file, draftPath, title, desc, author, unlisted, steps[]}
+let gifSelected = new Set(); // ids of steps ticked for the GIF builder
+let edDirty = false;         // true when there are edits not yet saved or published
+const edSel = {};            // step.id -> index of the selected click target (transient)
+let edColor = "#f97316";     // last-used target colour; the default for new targets
+
+/* --- ported helpers (kept identical to the extension so round-trips match) --- */
+const esc = escapeHtml;
+const calloutIcon = { tip:"💡", alert:"⚠️", warning:"🔔" };
+function edSlug(t){ return ((t||"guide").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,""))||"guide"; }
+function edUid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function edBlank(type,title){ return { id:edUid(), type, title, desc:"", img:null, hx:.5, hy:.5, hr:.045, showHl:false, blurs:[], targets:[] }; }
+function edStatus(t){ $("edStatus").textContent=t||""; }
+
+/* --- undo (last edits) --- */
+let edUndoStack = []; // snapshots of ED.steps, newest last (max 30)
+
+// Clone only the MUTABLE parts of the steps. Strings (screenshots, titles)
+// ride along by reference, so snapshots stay tiny even on 8MB guides.
+function cloneSteps(steps){
+  return steps.map(s=>({ ...s,
+    blurs:(s.blurs||[]).map(b=>({...b})),
+    targets:(s.targets||[]).map(t=>({...t})) }));
+}
+// Call BEFORE a structural edit (targets/blurs/steps/screenshots). Typing in
+// title/description fields is NOT snapshotted — those have the browser's own
+// per-field undo (Cmd/Ctrl+Z inside the field).
+function snap(){
+  if(!ED) return;
+  edUndoStack.push(cloneSteps(ED.steps));
+  if(edUndoStack.length>30) edUndoStack.shift();
+  edDirty=true;
+  updateUndoBtn();
+}
+function undo(){
+  if(!ED || !edUndoStack.length){ edStatus("Nothing to undo"); return; }
+  ED.steps = edUndoStack.pop();
+  edDirty=true;
+  updateUndoBtn(); edRender(); edStatus("Undid last change ↩");
+}
+// The Undo button stays fully visible even with nothing to undo — dimming it
+// made it look missing (user feedback); an empty stack answers "Nothing to undo".
+function updateUndoBtn(){}
+window.addEventListener("keydown",(e)=>{
+  if(!(e.metaKey||e.ctrlKey) || e.shiftKey || (e.key||"").toLowerCase()!=="z") return;
+  if(!ED || $("editor").classList.contains("hidden")) return;
+  const t=e.target, tag=(t&&t.tagName||"").toLowerCase();
+  if(tag==="input"||tag==="textarea"||(t&&t.isContentEditable)) return; // native text undo
+  e.preventDefault(); undo();
+});
+function linkify(raw){
+  raw=(raw||"").replace(/<((?:https?:\/\/)[^>\s]+)>/g,"$1");
+  const re=/(https?:\/\/[^\s<>"')\]]+)/g; let out="",last=0,m;
+  while((m=re.exec(raw))){ out+=esc(raw.slice(last,m.index)); let url=m[1],trail="";
+    const t=url.match(/[.,;:!?]+$/); if(t){ trail=t[0]; url=url.slice(0,-trail.length); }
+    out+=`<a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a>`+esc(trail);
+    last=m.index+m[1].length; }
+  return out+esc(raw.slice(last));
+}
+function linkifyML(raw){ return linkify(raw).replace(/\n/g,"<br>"); }
+// The click-target list for a step. New model: s.targets = array of
+//   { shape:"circle", x, y, r, color }  (x/y = centre, fractions of the image)
+//   { shape:"box",    x, y, w, h, color } (x/y = top-left, like blur boxes)
+// Legacy guides carry one highlight in hx/hy/hr/showHl — converted to a
+// one-circle list here. KEEP FUNCTIONALLY IDENTICAL to extension/export.js.
+function targetsOf(s){
+  if(Array.isArray(s.targets))
+    return s.targets.filter(t=>{
+      if(!t) return false;
+      if(t.shape==="box") return t.w>0&&t.h>0;
+      if(t.shape==="arrow") return [t.x1,t.y1,t.x2,t.y2].every(v=>typeof v==="number");
+      if(t.shape==="label") return !!(t.text&&String(t.text).trim());
+      return true;
+    });
+  if(s.showHl)
+    return [{ shape:"circle", x:(typeof s.hx==="number"?s.hx:0.5),
+              y:(typeof s.hy==="number"?s.hy:0.5), r:(s.hr||0.045), color:"#f97316" }];
+  return [];
+}
+function flatten(s){ return new Promise(res=>{
+  if(!s.img) return res(null);
+  if(s.img.startsWith("data:image/gif")) return res(s.img);       // keep GIFs animated
+  const targets=targetsOf(s);
+  const hasBlur=s.blurs&&s.blurs.length;
+  if(!targets.length&&!hasBlur) return res(s.img);
+  const im=new Image();
+  im.onload=()=>{ const c=document.createElement("canvas"); c.width=im.width; c.height=im.height;
+    const x=c.getContext("2d"); x.drawImage(im,0,0);
+    // Soft blur, not a hard mosaic. Per box we build an OPAQUE patch out of
+    // nothing but downscaled (already unreadable) pixels, then stamp it in:
+    //   1. downscale the padded area 10× — this is what truly destroys detail
+    //   2. draw it back up smoothed = the patch's opaque base
+    //   3. draw it again with ctx.filter blur on top = the smooth finish
+    //   4. clip to the box and stamp the patch with NO filter
+    // Building an opaque patch matters for privacy: drawing a blurred layer
+    // straight onto the photo let the ORIGINAL show through wherever the blur
+    // faded to transparent — near an image edge there's no room to pad, so the
+    // sharp text underneath came back. The patch has no transparency at all.
+    if(hasBlur){ for(const b of s.blurs){ const bx=b.x*im.width,by=b.y*im.height,bw=Math.max(1,b.w*im.width),bh=Math.max(1,b.h*im.height);
+      const rad=Math.max(8,Math.round(Math.min(bw,bh)*0.10)), pad=rad*3;
+      const sx=Math.max(0,bx-pad), sy=Math.max(0,by-pad);
+      const sw=Math.min(im.width-sx, bw+(bx-sx)+pad), sh=Math.min(im.height-sy, bh+(by-sy)+pad);
+      const t=document.createElement("canvas"); const f=10; t.width=Math.max(1,Math.round(sw/f)); t.height=Math.max(1,Math.round(sh/f));
+      const tx=t.getContext("2d"); tx.imageSmoothingEnabled=true; tx.imageSmoothingQuality="high";
+      tx.drawImage(im,sx,sy,sw,sh,0,0,t.width,t.height);
+      const p=document.createElement("canvas"); p.width=sw; p.height=sh;
+      const pc=p.getContext("2d"); pc.imageSmoothingEnabled=true; pc.imageSmoothingQuality="high";
+      pc.drawImage(t,0,0,t.width,t.height,0,0,sw,sh);
+      pc.filter="blur("+rad+"px)";
+      pc.drawImage(t,0,0,t.width,t.height,0,0,sw,sh);
+      x.save(); x.beginPath(); x.rect(bx,by,bw,bh); x.clip(); x.filter="none";
+      x.drawImage(p,sx,sy); x.restore(); } }
+    for(const t of targets){
+      const lw=Math.max(4,im.width*0.004);
+      const col=t.color||"#f97316"; // default: orange, like Scribe
+      x.lineWidth=lw; x.strokeStyle=col; x.fillStyle=col;
+      if(t.shape==="box"){ x.strokeRect(t.x*im.width, t.y*im.height, t.w*im.width, t.h*im.height); }
+      else if(t.shape==="arrow"){
+        const x1=t.x1*im.width, y1=t.y1*im.height, x2=t.x2*im.width, y2=t.y2*im.height;
+        const ang=Math.atan2(y2-y1,x2-x1);
+        const head=lw*3.2;
+        x.beginPath();
+        x.moveTo(x1,y1);
+        x.lineTo(x2-Math.cos(ang)*head*0.6, y2-Math.sin(ang)*head*0.6);
+        x.stroke();
+        x.beginPath();
+        x.moveTo(x2,y2);
+        x.lineTo(x2-Math.cos(ang-0.42)*head, y2-Math.sin(ang-0.42)*head);
+        x.lineTo(x2-Math.cos(ang+0.42)*head, y2-Math.sin(ang+0.42)*head);
+        x.closePath();
+        x.fill();
+      } else if(t.shape==="label"){
+        const fs=Math.max(12, im.width*0.028);
+        x.font=`bold ${fs}px "Century Gothic", CenturyGothic, "Trebuchet MS", sans-serif`;
+        const padX=fs*0.6, padY=fs*0.45;
+        const tw=x.measureText(t.text).width;
+        const lx=t.x*im.width, ly=t.y*im.height;
+        const bw=tw+padX*2, bh=fs+padY*2;
+        x.beginPath();
+        if(x.roundRect) x.roundRect(lx,ly,bw,bh,fs*0.35); else x.rect(lx,ly,bw,bh);
+        x.fill();
+        x.fillStyle="#ffffff";
+        x.textBaseline="middle";
+        x.fillText(t.text, lx+padX, ly+bh/2);
+      }
+      else { x.beginPath(); x.arc(t.x*im.width, t.y*im.height, (t.r||0.045)*im.width, 0, Math.PI*2); x.stroke(); }
+    }
+    res(c.toDataURL("image/jpeg",0.85)); };
+  im.onerror=()=>res(s.img); im.src=s.img;
+}); }
+function makeThumb(dataUrl,maxW=480){ return new Promise(res=>{
+  if(!dataUrl) return res(""); const im=new Image();
+  im.onload=()=>{ const scale=Math.min(1,maxW/im.naturalWidth); const c=document.createElement("canvas");
+    c.width=Math.max(1,Math.round(im.naturalWidth*scale)); c.height=Math.max(1,Math.round(im.naturalHeight*scale));
+    c.getContext("2d").drawImage(im,0,0,c.width,c.height); res(c.toDataURL("image/jpeg",0.6)); };
+  im.onerror=()=>res(""); im.src=dataUrl;
+}); }
+function reencodeForEmbed(dataUrl){ return new Promise(res=>{
+  if(!dataUrl) return res(null); if(dataUrl.startsWith("data:image/gif")) return res(dataUrl);
+  const im=new Image();
+  im.onload=()=>{ const c=document.createElement("canvas"); c.width=im.naturalWidth; c.height=im.naturalHeight;
+    c.getContext("2d").drawImage(im,0,0); res(c.toDataURL("image/jpeg",0.85)); };
+  im.onerror=()=>res(dataUrl); im.src=dataUrl;
+}); }
+
+/* --- editor UI --- */
+// Place a target overlay element over the screenshot. Arrows need real pixel
+// geometry (rotation), so their element must already be in the DOM.
+function positionTgt(el,t){
+  const col=t.color||"#f97316";
+  if(t.shape==="box"){
+    el.style.left=(t.x*100)+"%"; el.style.top=(t.y*100)+"%";
+    el.style.width=(t.w*100)+"%"; el.style.height=(t.h*100)+"%";
+    el.style.borderColor=col;
+  } else if(t.shape==="arrow"){
+    const p=el.parentElement; if(!p) return;
+    const W=p.clientWidth, H=p.clientHeight;
+    const dx=(t.x2-t.x1)*W, dy=(t.y2-t.y1)*H;
+    el.style.left=(t.x1*100)+"%"; el.style.top=(t.y1*100)+"%";
+    el.style.width=Math.hypot(dx,dy)+"px";
+    el.style.transformOrigin="0 50%";
+    el.style.transform="rotate("+Math.atan2(dy,dx)+"rad)";
+    el.style.borderTopColor=col;
+    const ah=el.querySelector(".ah"); if(ah) ah.style.borderLeftColor=col;
+  } else if(t.shape==="label"){
+    el.style.left=(t.x*100)+"%"; el.style.top=(t.y*100)+"%";
+    el.style.background=col;
+  } else {
+    el.style.left=(t.x*100)+"%"; el.style.top=(t.y*100)+"%";
+    el.style.width=((t.r||0.045)*200)+"%"; el.style.height="";
+    el.style.borderColor=col;
+  }
+}
+// Keep the legacy single-highlight fields mirroring the first circle target, so
+// anything that still reads hx/hy/hr/showHl (e.g. old exports) stays sensible.
+function syncLegacy(s){
+  const c=(s.targets||[]).find(t=>!t.shape||t.shape==="circle"); // circles only — arrows/labels have no hx/hy meaning
+  if(c){ s.hx=c.x; s.hy=c.y; s.hr=c.r||0.045; s.showHl=true; }
+  else s.showHl=false;
+}
+function clampBox(c){
+  const x=Math.max(0,Math.min(1,c.x)), y=Math.max(0,Math.min(1,c.y));
+  return { x, y, w:Math.min(1-x,c.w), h:Math.min(1-y,c.h) };
+}
+// Add/replace a step's screenshot from an image file on this computer.
+function edReplaceImage(s){
+  const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*";
+  inp.onchange=()=>{
+    const f=inp.files[0]; if(!f) return;
+    const r=new FileReader();
+    r.onload=()=>{ snap(); s.img=r.result; s.showHl=false; edRender(); };
+    r.readAsDataURL(f);
+  };
+  inp.click();
+}
+// Per-step media row: record a voice-over (mic) and/or attach a YouTube link.
+// Both are optional and save straight onto the step (s.audio data URL, s.video
+// = the raw link); the builder renders a ▶ player / thumbnail in the guide.
+function edMediaRow(s){
+  const row=document.createElement("div"); row.className="shot-tools mediarow";
+
+  // --- voice-over ---
+  const recBtn=document.createElement("button"); recBtn.className="modebtn";
+  let rec=null, chunks=[];
+  const setIdle=()=>{ recBtn.textContent=s.audio?"🎙 Re-record":"🎙 Record voice-over"; recBtn.classList.remove("on"); };
+  setIdle();
+  recBtn.onclick=async()=>{
+    if(rec && rec.state==="recording"){ rec.stop(); return; }
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      chunks=[]; rec=new MediaRecorder(stream);
+      rec.ondataavailable=e=>{ if(e.data && e.data.size) chunks.push(e.data); };
+      rec.onstop=()=>{
+        stream.getTracks().forEach(t=>t.stop());
+        const blob=new Blob(chunks,{type:(rec&&rec.mimeType)||"audio/webm"});
+        const fr=new FileReader();
+        fr.onload=()=>{ snap(); s.audio=fr.result; edRender(); };
+        fr.readAsDataURL(blob);
+      };
+      rec.start();
+      recBtn.textContent="⏹ Stop recording"; recBtn.classList.add("on");
+    }catch(e){ alert("Couldn't start recording.\n\n"+(e.message||e)+"\n\nMake sure your browser is allowed to use the microphone (look for the mic icon in the address bar)."); }
+  };
+  row.append(recBtn);
+  if(s.audio){
+    const au=document.createElement("audio"); au.controls=true; au.src=s.audio; au.style.height="34px";
+    const del=document.createElement("button"); del.className="modebtn"; del.textContent="✕ voice-over";
+    del.title="Remove the voice-over"; del.onclick=()=>{ snap(); delete s.audio; edRender(); };
+    row.append(au,del);
+  }
+
+  // --- YouTube video ---
+  const vidInp=document.createElement("input"); vidInp.type="text"; vidInp.className="ltinp";
+  vidInp.placeholder="🎬 Paste a YouTube link"; vidInp.value=s.video||"";
+  vidInp.style.width="230px";
+  const apply=()=>{
+    const v=vidInp.value.trim();
+    if(v && !ytId(v)){ vidInp.style.borderColor="var(--accent)"; edStatus("That doesn't look like a YouTube link."); return; }
+    vidInp.style.borderColor="";
+    if((s.video||"")!==v){ snap(); if(v) s.video=v; else delete s.video; edDirty=true; edRender(); }
+  };
+  vidInp.onchange=apply;
+  vidInp.onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); apply(); } };
+  row.append(vidInp);
+  if(ytId(s.video)){
+    const ok=document.createElement("a"); ok.className="modebtn"; ok.textContent="▶ preview";
+    ok.href="https://youtu.be/"+ytId(s.video); ok.target="_blank"; ok.rel="noopener";
+    ok.title="Open the video in a new tab"; row.append(ok);
+  }
+  return row;
+}
+function edGrow(t){ t.style.height="auto"; t.style.height=t.scrollHeight+"px"; }
+function edMove(i,dir){ const j=i+dir; if(j<0||j>=ED.steps.length) return; snap(); [ED.steps[i],ED.steps[j]]=[ED.steps[j],ED.steps[i]]; edRender(); }
+function edIbtn(txt,title,fn,danger){ const b=document.createElement("button"); b.className="ibtn"+(danger?" danger":""); b.textContent=txt; b.title=title; b.onclick=fn; return b; }
+
+function edRender(){
+  const host=$("edSteps"); host.innerHTML="";
+  // Drop any selections whose steps no longer exist (after delete/combine).
+  if(ED){ const live=new Set(ED.steps.map(s=>s.id)); [...gifSelected].forEach(id=>{ if(!live.has(id)) gifSelected.delete(id); }); }
+  if(!ED||!ED.steps.length){ host.innerHTML='<div class="card note">No steps yet — use “+ Add step”.</div>'; updateGifBar(); return; }
+  let n=0;
+  ED.steps.forEach((s,i)=>{
+    let badge;
+    if(s.type==="chapter"){ n=0; badge="📖"; }
+    else if(calloutIcon[s.type]) badge=calloutIcon[s.type];
+    else if(s.type==="nav") badge="→";
+    else badge=String(++n);
+    host.append(edInsertBar(i)); // insert point above every card
+    host.append(edCard(s,i,badge));
+  });
+  updateGifBar(); // keep the bottom action bar in sync with the selection
+}
+
+// A quiet divider between cards offering "insert a step / chapter right here".
+// The bottom "+ Add step / + Add chapter" buttons still append at the end.
+function edInsertBar(idx){
+  const bar=document.createElement("div"); bar.className="insbar";
+  const bs=document.createElement("div"); bs.className="insbtns";
+  const mk=(txt,title,type,label)=>{
+    const b=document.createElement("button"); b.textContent=txt; b.title=title;
+    b.onclick=()=>{
+      snap();
+      ED.steps.splice(idx,0,edBlank(type,label));
+      edRender();
+      // jump to the new card and put the cursor in its title
+      requestAnimationFrame(()=>{
+        const el=$("edSteps").querySelectorAll(".estep")[idx];
+        if(el){
+          el.scrollIntoView({ block:"center", behavior:"smooth" });
+          const t=el.querySelector(".etitle"); if(t){ t.focus(); t.select(); }
+        }
+      });
+    };
+    return b;
+  };
+  bs.append(mk("+ Step","Insert a step here","note","New step"),
+            mk("📖 Chapter","Insert a chapter heading here","chapter","New chapter"));
+  bar.append(bs);
+  return bar;
+}
+function edCard(s,i,badge){
+  const el=document.createElement("div");
+  el.className="estep"+(calloutIcon[s.type]?" callout "+s.type:"")+(s.type==="chapter"?" chapter":"");
+  if(gifSelected.has(s.id)) el.classList.add("selected");
+  const head=document.createElement("div"); head.className="ehead";
+  // GIF builder: tick-box to include this step's screenshot (visible in GIF mode)
+  const selWrap=document.createElement("label"); selWrap.className="sel-check";
+  selWrap.title="Include this step's screenshot in the GIF";
+  const selBox=document.createElement("input"); selBox.type="checkbox";
+  selBox.checked=gifSelected.has(s.id);
+  selBox.onchange=()=>{ if(selBox.checked) gifSelected.add(s.id); else gifSelected.delete(s.id);
+    el.classList.toggle("selected", selBox.checked); updateGifBar(); };
+  selWrap.append(selBox);
+  const num=document.createElement("div"); num.className="enum"; num.textContent=badge; num.title="Drag to reorder";
+  const fields=document.createElement("div"); fields.className="efields";
+  const title=document.createElement("input"); title.className="etitle"; title.value=s.title||"";
+  title.placeholder=s.type==="chapter"?"Chapter title…":"Step title…";
+  title.oninput=()=>{ s.title=title.value; };
+  const desc=document.createElement("textarea"); desc.className="edesc"; desc.rows=1; desc.value=s.desc||"";
+  desc.placeholder="Add detail (optional)…"; desc.oninput=()=>{ s.desc=desc.value; edGrow(desc); };
+  fields.append(title); setTimeout(()=>edGrow(desc));
+  const tools=document.createElement("div"); tools.className="etools";
+  if(s.type!=="nav"){
+    const sel=document.createElement("select"); sel.className="type-sel"; sel.title="Block type — a numbered step, a chapter heading, or a callout";
+    const cur=(s.type==="chapter"||calloutIcon[s.type])?s.type:"click";
+    [["click","● Step"],["chapter","📖 Chapter"],["tip","💡 Tip"],["alert","⚠️ Alert"],["warning","🔔 Warning"]]
+      .forEach(([v,l])=>{ const o=document.createElement("option"); o.value=v; o.textContent=l; if(v===cur)o.selected=true; sel.append(o); });
+    sel.onchange=()=>{ snap(); s.type=sel.value; edRender(); };
+    tools.append(sel);
+  }
+  tools.append(
+    edIbtn("↑","Move up",()=>edMove(i,-1)),
+    edIbtn("↓","Move down",()=>edMove(i,1)),
+    edIbtn("📷","Add or replace the screenshot with an image file",()=>edReplaceImage(s)),
+    edIbtn("⧉","Duplicate",()=>{ snap(); ED.steps.splice(i+1,0,{ ...s, id:edUid(),
+      blurs:(s.blurs||[]).map(b=>({...b})), targets:(s.targets||[]).map(t=>({...t})) }); edRender(); }),
+    edIbtn("✕","Delete",()=>{ if(confirm("Delete this step?")){ snap(); ED.steps.splice(i,1); edRender(); } },true)
+  );
+  // The detail text gets its own row spanning title + tools, so long text uses
+  // the whole card instead of the narrow column left over beside the buttons.
+  const descRow=document.createElement("div"); descRow.className="edescrow"; descRow.append(desc);
+  head.append(selWrap,num,fields,tools,descRow); el.append(head);
+
+  if(s.img){
+    if(!Array.isArray(s.targets)) s.targets=[];
+    // Which target is selected on this card (clamped; -1 = none).
+    let sel = edSel[s.id];
+    if(!Number.isInteger(sel) || sel<0 || sel>=s.targets.length) sel = s.targets.length ? 0 : -1;
+    edSel[s.id]=sel;
+    const selT = sel>=0 ? s.targets[sel] : null;
+
+    const wrap=document.createElement("div"); wrap.className="shotwrap aim";
+    const img=document.createElement("img"); img.src=s.img; img.draggable=false; wrap.append(img);
+
+    /* click targets — drag one to move it, its ✕ deletes it, a click selects */
+    const tgtEls=[];
+    s.targets.forEach((t,ti)=>{
+      const shape=t.shape==="box"?"box":t.shape==="arrow"?"arrow":t.shape==="label"?"label":"circle";
+      const tg=document.createElement("div");
+      tg.className="tgt "+shape+(ti===sel?" sel":"");
+      tg.title="Drag to move · ✕ deletes";
+      if(shape==="label"){
+        const lt=document.createElement("span"); lt.className="lt"; lt.textContent=t.text||""; tg.append(lt);
+      }
+      if(shape==="arrow"){
+        const ah=document.createElement("div"); ah.className="ah"; tg.append(ah);
+      }
+      const tx=document.createElement("button"); tx.className="tx"; tx.textContent="✕";
+      tx.title="Delete this target";
+      tx.onmousedown=(e)=>e.stopPropagation();
+      tx.onclick=(e)=>{ e.stopPropagation(); snap(); s.targets.splice(ti,1);
+        edSel[s.id]=Math.min(ti, s.targets.length-1); syncLegacy(s); edRender(); };
+      tg.append(tx);
+      if(ti===sel && shape!=="label"){
+        // corner handle: circle = radius, box = width/height, arrow = move the TIP
+        const rz=document.createElement("div"); rz.className="rz";
+        rz.title=shape==="arrow"?"Drag to move the arrow tip":"Drag to resize";
+        rz.onmousedown=(e)=>{
+          e.preventDefault(); e.stopPropagation();
+          const r=wrap.getBoundingClientRect();
+          const pre=cloneSteps(ED.steps); let changed=false;
+          const mm=(ev)=>{
+            const cx=(ev.clientX-r.left)/r.width, cy=(ev.clientY-r.top)/r.height;
+            changed=true;
+            if(t.shape==="box"){
+              t.w=Math.max(0.02, Math.min(1-t.x, cx-t.x));
+              t.h=Math.max(0.02, Math.min(1-t.y, cy-t.y));
+            } else if(t.shape==="arrow"){
+              t.x2=Math.max(0, Math.min(1, cx));
+              t.y2=Math.max(0, Math.min(1, cy));
+            } else {
+              // t.r is a fraction of the image WIDTH; convert dy into width units
+              const dx=cx-t.x, dy=(cy-t.y)*(r.height/r.width);
+              t.r=Math.max(0.01, Math.min(0.5, Math.hypot(dx,dy)));
+            }
+            positionTgt(tg,t);
+          };
+          const mu=()=>{
+            window.removeEventListener("mousemove",mm); window.removeEventListener("mouseup",mu);
+            if(changed){ edUndoStack.push(pre); if(edUndoStack.length>30) edUndoStack.shift(); updateUndoBtn();
+              syncLegacy(s); edRender(); }
+          };
+          window.addEventListener("mousemove",mm); window.addEventListener("mouseup",mu);
+        };
+        tg.append(rz);
+      }
+      tg.onmousedown=(e)=>{
+        if(e.button!==0) return;
+        e.preventDefault(); e.stopPropagation();
+        const r=wrap.getBoundingClientRect();
+        const px=(e.clientX-r.left)/r.width, py=(e.clientY-r.top)/r.height;
+        const off={ x:px-t.x, y:py-t.y }; // grab offset so the target doesn't jump
+        const a0=t.shape==="arrow"?{x1:t.x1,y1:t.y1,x2:t.x2,y2:t.y2}:null;
+        const pre=cloneSteps(ED.steps); let moved=false;
+        const mm=(ev)=>{
+          const cx=(ev.clientX-r.left)/r.width, cy=(ev.clientY-r.top)/r.height;
+          if(!moved && Math.abs(cx-px)<0.004 && Math.abs(cy-py)<0.004) return; // still a click
+          moved=true;
+          if(t.shape==="arrow"){
+            // shift BOTH ends by the drag delta, kept inside the image
+            let dx=cx-px, dy=cy-py;
+            dx=Math.max(-Math.min(a0.x1,a0.x2), Math.min(1-Math.max(a0.x1,a0.x2), dx));
+            dy=Math.max(-Math.min(a0.y1,a0.y2), Math.min(1-Math.max(a0.y1,a0.y2), dy));
+            t.x1=a0.x1+dx; t.y1=a0.y1+dy; t.x2=a0.x2+dx; t.y2=a0.y2+dy;
+          } else if(t.shape==="box"){
+            t.x=Math.max(0, Math.min(1-t.w, cx-off.x));
+            t.y=Math.max(0, Math.min(1-t.h, cy-off.y));
+          } else {
+            t.x=Math.max(0, Math.min(1, cx-off.x));
+            t.y=Math.max(0, Math.min(1, cy-off.y));
+          }
+          positionTgt(tg,t);
+        };
+        const mu=()=>{
+          window.removeEventListener("mousemove",mm); window.removeEventListener("mouseup",mu);
+          if(moved){
+            edUndoStack.push(pre); if(edUndoStack.length>30) edUndoStack.shift(); updateUndoBtn();
+            edSel[s.id]=ti; syncLegacy(s); edRender();
+          } else if(edSel[s.id]!==ti){ edSel[s.id]=ti; edRender(); }
+        };
+        window.addEventListener("mousemove",mm); window.addEventListener("mouseup",mu);
+      };
+      tgtEls.push(tg); wrap.append(tg);
+      positionTgt(tg,t);
+    });
+    // Arrows need REAL pixel geometry, which only exists once the card is in the
+    // document AND the screenshot has its final size — fix them up at both moments.
+    const fixArrows=()=>{ s.targets.forEach((t,ti)=>{ if(t.shape==="arrow"&&tgtEls[ti]) positionTgt(tgtEls[ti],t); }); };
+    requestAnimationFrame(fixArrows);
+    img.addEventListener("load", fixArrows);
+
+    /* existing blur regions (baked into the picture on publish) */
+    (s.blurs||[]).forEach((b,bi)=>{
+      const box=document.createElement("div"); box.className="blurbox";
+      box.style.left=b.x*100+"%"; box.style.top=b.y*100+"%";
+      box.style.width=b.w*100+"%"; box.style.height=b.h*100+"%";
+      const rmb=document.createElement("button"); rmb.className="rmblur"; rmb.textContent="✕"; rmb.title="Remove this blur";
+      rmb.onclick=(e)=>{ e.stopPropagation(); snap(); s.blurs.splice(bi,1); edRender(); };
+      box.append(rmb); wrap.append(box);
+    });
+
+    /* drag modes: blur boxes, box targets, and arrows all share the drag gesture */
+    let blurMode=false, boxMode=false, arrowMode=false, drag=null;
+    wrap.onmousedown=(e)=>{
+      if((!blurMode && !boxMode && !arrowMode) || e.target.classList.contains("rmblur")) return;
+      const r=wrap.getBoundingClientRect();
+      drag={ x:(e.clientX-r.left)/r.width, y:(e.clientY-r.top)/r.height, r, box:document.createElement("div") };
+      drag.box.className=arrowMode?"arrowpreview":"blurpreview";
+      if(boxMode) drag.box.style.borderColor=edColor;
+      if(arrowMode){
+        drag.box.style.borderTopColor=edColor;
+        drag.box.style.left=(drag.x*100)+"%"; drag.box.style.top=(drag.y*100)+"%";
+      }
+      wrap.append(drag.box); e.preventDefault();
+    };
+    wrap.onmousemove=(e)=>{
+      if(!drag) return;
+      const cx=(e.clientX-drag.r.left)/drag.r.width, cy=(e.clientY-drag.r.top)/drag.r.height;
+      if(arrowMode){
+        const dxPx=(cx-drag.x)*drag.r.width, dyPx=(cy-drag.y)*drag.r.height;
+        drag.box.style.width=Math.hypot(dxPx,dyPx)+"px";
+        drag.box.style.transform="rotate("+Math.atan2(dyPx,dxPx)+"rad)";
+        drag.cur={ x1:drag.x, y1:drag.y, x2:cx, y2:cy };
+        return;
+      }
+      const x=Math.min(drag.x,cx), y=Math.min(drag.y,cy);
+      const w=Math.abs(cx-drag.x), h=Math.abs(cy-drag.y);
+      Object.assign(drag.box.style,{ left:x*100+"%", top:y*100+"%", width:w*100+"%", height:h*100+"%" });
+      drag.cur={x,y,w,h};
+    };
+    const endDrag=()=>{
+      if(!drag) return;
+      const c=drag.cur; const wasArrow=arrowMode; drag.box.remove(); drag=null;
+      if(!c) return;
+      if(wasArrow){
+        // ignore accidental micro-drags
+        if(Math.hypot(c.x2-c.x1, c.y2-c.y1) < 0.02) return;
+        snap();
+        s.targets.push({ shape:"arrow",
+          x1:Math.max(0,Math.min(1,c.x1)), y1:Math.max(0,Math.min(1,c.y1)),
+          x2:Math.max(0,Math.min(1,c.x2)), y2:Math.max(0,Math.min(1,c.y2)), color:edColor });
+        edSel[s.id]=s.targets.length-1;
+        syncLegacy(s); edRender();
+        return;
+      }
+      if(c.w>0.01 && c.h>0.01){
+        snap();
+        if(boxMode){
+          s.targets.push({ shape:"box", ...clampBox(c), color:edColor });
+          edSel[s.id]=s.targets.length-1;
+          syncLegacy(s);
+        } else {
+          (s.blurs=s.blurs||[]).push(clampBox(c));
+        }
+        edRender();
+      }
+    };
+    wrap.onmouseup=endDrag; wrap.onmouseleave=endDrag;
+
+    wrap.title="Drag a target to move it · click empty image to place the selected one";
+    wrap.onclick=(e)=>{
+      if(blurMode || boxMode || e.target.classList.contains("rmblur")) return;
+      const r=wrap.getBoundingClientRect();
+      const cx=(e.clientX-r.left)/r.width, cy=(e.clientY-r.top)/r.height;
+      snap();
+      if(!s.targets.length){
+        // first click on a bare screenshot drops a circle right there (old habit)
+        s.targets.push({ shape:"circle", x:cx, y:cy, r:.045, color:edColor });
+        edSel[s.id]=0;
+      } else {
+        const t=s.targets[edSel[s.id]];
+        if(t.shape==="box"){
+          t.x=Math.max(0, Math.min(1-t.w, cx-t.w/2));
+          t.y=Math.max(0, Math.min(1-t.h, cy-t.h/2));
+        } else { t.x=cx; t.y=cy; }
+      }
+      syncLegacy(s); edRender();
+    };
+    el.append(wrap);
+
+    const st=document.createElement("div"); st.className="shot-tools";
+    const HINT_DEFAULT="drag a target to move it · corner handle resizes · ✕ deletes";
+    // add a circle target immediately (drag it where you want it)
+    const addC=document.createElement("button"); addC.className="modebtn"; addC.textContent="🎯 Add circle";
+    addC.title="Add a circle target, then drag it into place";
+    addC.onclick=()=>{
+      snap();
+      s.targets.push({ shape:"circle", x:.5, y:.5, r:.045, color:edColor });
+      edSel[s.id]=s.targets.length-1; syncLegacy(s); edRender();
+    };
+    // one drawing mode at a time; each button clears the others
+    const setMode=(which)=>{
+      boxMode   = which==="box"   ? !boxMode   : false;
+      arrowMode = which==="arrow" ? !arrowMode : false;
+      blurMode  = which==="blur"  ? !blurMode  : false;
+      addB.classList.toggle("on",boxMode);
+      addA.classList.toggle("on",arrowMode);
+      blurBtn.classList.toggle("on",blurMode);
+      wrap.classList.toggle("blurmode",boxMode||arrowMode||blurMode);
+      hint.textContent =
+        boxMode   ? "now drag on the image to draw the box" :
+        arrowMode ? "drag on the image from the arrow's tail to its tip" :
+        blurMode  ? "drag on the image to blur an area · ✕ removes a blur" :
+        HINT_DEFAULT;
+    };
+    // draw a box target by dragging
+    const addB=document.createElement("button"); addB.className="modebtn"; addB.textContent="▭ Draw box";
+    addB.title="Draw a box target: click this, then drag on the image";
+    addB.onclick=()=>setMode("box");
+    // draw an arrow by dragging tail → tip
+    const addA=document.createElement("button"); addA.className="modebtn"; addA.textContent="➤ Arrow";
+    addA.title="Draw an arrow: click this, then drag from tail to tip";
+    addA.onclick=()=>setMode("arrow");
+    // add a text label (edit its wording in the box that appears)
+    const addL=document.createElement("button"); addL.className="modebtn"; addL.textContent="🔤 Label";
+    addL.title="Add a text label — type its wording in the text box on this bar";
+    addL.onclick=()=>{
+      snap();
+      s.targets.push({ shape:"label", x:.38, y:.44, text:"Type here…", color:edColor });
+      edSel[s.id]=s.targets.length-1; syncLegacy(s); edRender();
+    };
+    const blurBtn=document.createElement("button"); blurBtn.className="modebtn"; blurBtn.textContent="🌫 Blur";
+    blurBtn.title="Toggle blur mode, then drag boxes over anything sensitive";
+    blurBtn.onclick=()=>setMode("blur");
+    // colour of the selected target (and the default for new ones)
+    const colorInp=document.createElement("input"); colorInp.type="color";
+    colorInp.value=(selT && selT.color) || edColor;
+    colorInp.title="Colour for the selected target (and new ones)";
+    let colorPre=null;
+    colorInp.onpointerdown=()=>{ colorPre = ED ? cloneSteps(ED.steps) : null; };
+    colorInp.oninput=()=>{
+      edColor=colorInp.value;
+      if(selT){ selT.color=edColor; const n=tgtEls[sel]; if(n) n.style.borderColor=edColor; }
+    };
+    colorInp.onchange=()=>{  // one undo entry per colour pick, not per shade dragged
+      if(colorPre && selT){ edUndoStack.push(colorPre); if(edUndoStack.length>30) edUndoStack.shift(); updateUndoBtn(); }
+      colorPre=null;
+    };
+    // wording of the selected label (greyed unless a label is selected)
+    let ltPre=null;
+    const ltInp=document.createElement("input"); ltInp.type="text"; ltInp.className="ltinp";
+    ltInp.placeholder="label text…"; ltInp.title="Text of the selected label";
+    if(selT && selT.shape==="label"){ ltInp.value=selT.text||""; } else { ltInp.classList.add("dis"); }
+    ltInp.onfocus=()=>{ ltPre = ED ? cloneSteps(ED.steps) : null; };
+    ltInp.oninput=()=>{
+      if(!selT||selT.shape!=="label") return;
+      selT.text=ltInp.value;
+      const n=tgtEls[sel]; if(n){ const sp=n.querySelector(".lt"); if(sp) sp.textContent=ltInp.value; }
+    };
+    ltInp.onchange=()=>{  // one undo entry per editing session in the field
+      if(ltPre && selT && selT.shape==="label"){ edUndoStack.push(ltPre); if(edUndoStack.length>30) edUndoStack.shift(); updateUndoBtn(); }
+      ltPre=null;
+    };
+    // undo lives on every step's tool bar too (same global undo as the top bar —
+    // users look for it next to the tools they just used)
+    const undoB=document.createElement("button"); undoB.className="modebtn"; undoB.textContent="↩ Undo";
+    undoB.title="Undo the last edit (Cmd/Ctrl+Z)";
+    undoB.onclick=()=>undo();
+    const rm=document.createElement("button"); rm.className="ibtn danger"; rm.textContent="🖼✕"; rm.title="Remove screenshot"; rm.style.width="auto"; rm.style.padding="0 8px";
+    rm.onclick=()=>{ if(confirm("Remove this screenshot?")){ snap(); s.img=null; edRender(); } };
+    const hint=document.createElement("span"); hint.className="hint";
+    hint.textContent=HINT_DEFAULT;
+    st.append(addC,addB,addA,addL,blurBtn,colorInp,ltInp,undoB,rm,hint);
+    el.append(st);
+
+    // Any GIF step can be re-timed. If its source frames weren't stored (made
+    // before that feature, or by an older combine), we decode them on first use.
+    if(String(s.img).startsWith("data:image/gif")){
+      const gr=document.createElement("div"); gr.className="shot-tools";
+      const glbl=document.createElement("label"); glbl.style.width="100%";
+      const grange=document.createElement("input"); grange.type="range"; grange.min=500; grange.max=6000; grange.step=100; grange.value=s.gifDelay||2000;
+      grange.style.flex="1";
+      const gval=document.createElement("span"); gval.textContent=((s.gifDelay||2000)/1000).toFixed(1)+"s / frame";
+      let gpre=null;
+      grange.onpointerdown=()=>{ gpre=ED?cloneSteps(ED.steps):null; };
+      grange.oninput=()=>{ gval.textContent=(grange.value/1000).toFixed(1)+"s / frame"; };
+      grange.onchange=async()=>{
+        if(gpre){ edUndoStack.push(gpre); if(edUndoStack.length>30) edUndoStack.shift(); updateUndoBtn(); } gpre=null;
+        edDirty=true; edStatus("Re-timing animation…");
+        try{
+          if(!Array.isArray(s.gifSrc) || s.gifSrc.length<2) s.gifSrc=await decodeGifFrames(s.img);
+          if(!s.gifSrc || s.gifSrc.length<2) throw new Error("only one frame found");
+          await reencodeGif(s, +grange.value);
+          const im=wrap.querySelector("img"); if(im) im.src=s.img;
+          edStatus("Animation speed updated ✓");
+        }
+        catch(e){ console.error(e); edStatus(""); alert("Couldn't change this animation's speed.\n\n"+(e.message||"")+"\n\nTip: animations made in the current version change instantly; very old ones may need to be remade."); }
+      };
+      glbl.append(document.createTextNode("🎞 animation speed "), grange, document.createTextNode(" "), gval);
+      gr.append(glbl); el.append(gr);
+    }
+  } else if(s.type!=="chapter" && !calloutIcon[s.type] && s.type!=="nav"){
+    const no=document.createElement("div"); no.className="noshot note";
+    no.textContent="No screenshot on this step — use 📷 above to add one.";
+    el.append(no);
+  }
+
+  // Voice-over + video controls on every real step and callout (not chapters/nav).
+  if(s.type!=="chapter" && s.type!=="nav") el.append(edMediaRow(s));
+
+  num.onmousedown=()=>{ el.draggable=true; };
+  el.ondragstart=(e)=>{ e.dataTransfer.setData("text/plain",i); el.style.opacity=".5"; };
+  el.ondragend=()=>{ el.style.opacity=""; el.draggable=false; };
+  el.ondragover=(e)=>{ e.preventDefault(); };
+  el.ondrop=(e)=>{ e.preventDefault(); const from=+e.dataTransfer.getData("text/plain"); if(isNaN(from)||from===i) return; snap(); const [m]=ED.steps.splice(from,1); ED.steps.splice(i,0,m); edRender(); };
+  return el;
+}
+
+// A YouTube link (watch, youtu.be, embed, shorts, live) OR a bare id → the
+// 11-char video id, else "". Kept identical to export.js so exports match.
+function ytId(u){
+  if(!u) return "";
+  u=(""+u).trim();
+  if(/^[\w-]{11}$/.test(u)) return u;
+  const m=u.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/|\/live\/)([\w-]{11})/);
+  return m?m[1]:"";
+}
+// Per-step media (recorded voice-over + a YouTube video) for the exported guide.
+// String-concatenated (not a template literal) so it stays byte-identical to the
+// copy in export.js buildGuideExport. Absent fields render nothing.
+function stepMediaHtml(s){
+  var out="";
+  if(s.audio) out+='<div class="vo"><span class="volabel">🎙 Voice-over</span>'+
+    '<audio controls preload="none" src="'+s.audio+'"></audio></div>';
+  var id=ytId(s.video);
+  if(id) out+='<div class="vid"><button class="vidbtn" type="button" data-yt="'+id+
+    '" style="background-image:url(https://i.ytimg.com/vi/'+id+'/hqdefault.jpg)">'+
+    '<span class="vidplay">▶</span><span class="vidcap">Watch video</span></button></div>';
+  return out;
+}
+/* --- build the exported/published HTML (identical shape to the extension) --- */
+async function edBuildExport(){
+  const steps=ED.steps;
+  const meta={ title:ED.title, desc:ED.desc, author:ED.author, unlisted:ED.unlisted, file:ED.file };
+  const imgs=await Promise.all(steps.map(flatten));
+  const thumb=await makeThumb(imgs.find(u=>u)||"");
+  // Redaction has to be PERMANENT. The embedded copy is what makes a guide
+  // re-editable, but embedding the untouched original under a blur box would
+  // publish the very thing the blur hides (anyone could read it out of the
+  // page source). So for a blurred step we embed the BLUR-BAKED image and drop
+  // the blur boxes (they're already burned in). Targets are left as data so
+  // arrows/circles stay editable — flatten() with targets:[] bakes blurs only.
+  // A GIF can't be baked into, so its image is dropped rather than exposed.
+  const embedSteps=await Promise.all(steps.map(async s=>{
+    if(s.blurs && s.blurs.length){
+      if(String(s.img||"").startsWith("data:image/gif")) return { ...s, img:null, blurs:[] };
+      return { ...s, img: await flatten({ ...s, targets:[], showHl:false }), blurs:[] };
+    }
+    return { ...s, img: await reencodeForEmbed(s.img) };
+  }));
+  const fileName=meta.file || edSlug(meta.title)+".html";
+  const dataJson=JSON.stringify({ stepsnap:2, title:meta.title, desc:meta.desc, file:fileName,
+    unlisted:!!meta.unlisted, author:meta.author||"", steps:embedSteps }).replace(/</g,"\\u003c");
+  let n=0;
+  const stepCount=steps.filter(s=>s.type!=="chapter"&&s.type!=="nav"&&!calloutIcon[s.type]).length;
+  const chapters=[];
+  const body=steps.map((s,i)=>{
+    if(s.type==="chapter"){ n=0; const id="chapter-"+(chapters.length+1);
+      chapters.push({ id, title:s.title||("Chapter "+(chapters.length+1)) });
+      return `<h2 class="chapter" id="${id}">${linkify(s.title)}</h2>`+(s.desc?`<p class="chapter-lead">${linkifyML(s.desc)}</p>`:""); }
+    if(calloutIcon[s.type]){ return `<div class="callout ${s.type}"><span class="cico">${calloutIcon[s.type]}</span>
+      <div class="ctext">${s.title?`<h2>${linkify(s.title)}</h2>`:""}${s.desc?`<p>${linkifyML(s.desc)}</p>`:""}
+      ${imgs[i]?`<img src="${imgs[i]}">`:""}${stepMediaHtml(s)}</div></div>`; }
+    const num=s.type==="nav"?"→":++n;
+    return `<div class="step"><div class="head"><span class="n">${num}</span>
+      <div><h2>${linkify(s.title)}</h2>${s.desc?`<p>${linkifyML(s.desc)}</p>`:""}</div></div>
+      ${imgs[i]?`<img src="${imgs[i]}">`:""}${stepMediaHtml(s)}</div>`;
+  }).join("\n");
+  const toc=chapters.length>=2?`<nav id="toc" aria-label="Chapters">
+<h4>📖 Chapters</h4><button id="tocToggle" type="button" aria-expanded="false">📖 Chapters</button>
+<ol>${chapters.map(c=>`<li><a href="#${c.id}">${esc(c.title)}</a></li>`).join("")}</ol>
+</nav>`:"";
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(meta.title)||"Guide"}</title>
+<meta name="description" content="${esc(meta.desc)}">
+<meta name="stepsnap-steps" content="${stepCount}">
+${thumb?`<meta name="stepsnap-thumb" content="${thumb}">`:""}
+${meta.unlisted?`<meta name="stepsnap-unlisted" content="1">`:""}
+${meta.author?`<meta name="stepsnap-author" content="${esc(meta.author)}">`:""}
+<meta name="generator" content="StepSnap">
+<style>body{font:16px/1.6 "Century Gothic",CenturyGothic,"URW Gothic","Avant Garde",Futura,"Trebuchet MS",sans-serif;margin:0;padding:0;color:#211d17;background:#faf7f0}
+.page{max-width:1120px;margin:0 auto;padding:34px 20px 48px;display:flex;gap:34px;align-items:flex-start}
+.col{flex:1 1 auto;min-width:0;max-width:820px;margin:0 auto}
+h1{font-size:34px;margin-bottom:4px}.lead{color:#7c7466;margin-top:0}
+.byline{color:#7c7466;font-size:13px;margin:0 0 14px}
+.home{display:inline-block;margin:0 8px 18px 0;padding:7px 14px;border:1px solid #e6decd;border-radius:999px;
+background:#fff;color:#211d17;text-decoration:none;font:600 13.5px inherit;cursor:pointer;
+box-shadow:0 6px 18px -14px rgba(60,45,20,.5)}
+.home:hover{border-color:#0e6b58}
+@media print{.home{display:none}}
+.step{background:#fff;border:1px solid #e6decd;border-radius:12px;margin:22px 0;overflow:hidden;box-shadow:0 8px 24px -16px rgba(60,45,20,.3)}
+.head{display:flex;gap:14px;padding:16px 18px;align-items:flex-start}
+.n{flex:none;width:32px;height:32px;border-radius:50%;background:#d23f31;color:#fff;display:grid;place-items:center;font-weight:700}
+h2{font-size:18px;margin:3px 0 2px}.head p{margin:2px 0 0;color:#7c7466;font-size:14px}
+img{display:block;width:calc(100% - 36px);margin:0 18px 18px;border-radius:8px;border:1px solid #e6decd}
+.callout{display:flex;gap:13px;align-items:flex-start;border:1px solid;border-radius:12px;margin:22px 0;padding:15px 18px}
+.callout .cico{font-size:22px;line-height:1;flex:none;margin-top:1px}
+.callout .ctext{min-width:0;flex:1}
+.callout h2{margin:0 0 3px}.callout p{margin:0;color:#5c5346;font-size:15px}
+.callout img{width:100%;margin:12px 0 0}
+.callout.tip{background:#eef6f3;border-color:#bfe0d6}
+.callout.alert{background:#fdeceb;border-color:#f1bdb6}
+.callout.warning{background:#fbf4e2;border-color:#ecdca6}
+.vo{display:flex;align-items:center;gap:10px;margin:0 18px 16px;flex-wrap:wrap}
+.vo .volabel{font-size:13px;color:#7c7466;font-weight:600}
+.vo audio{height:36px;max-width:100%}
+.vid{margin:0 18px 18px}
+.vidbtn{position:relative;display:block;width:100%;max-width:520px;aspect-ratio:16/9;border:1px solid #e6decd;border-radius:8px;background-color:#000;background-position:center;background-size:cover;background-repeat:no-repeat;cursor:pointer;padding:0;overflow:hidden}
+.vidbtn .vidplay{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:62px;height:62px;border-radius:50%;background:rgba(210,63,49,.92);color:#fff;font-size:24px;display:grid;place-items:center;box-shadow:0 6px 20px -6px rgba(0,0,0,.6)}
+.vidbtn .vidcap{position:absolute;left:0;right:0;bottom:0;padding:20px 12px 8px;color:#fff;font-weight:600;font-size:14px;text-align:left;text-shadow:0 1px 3px rgba(0,0,0,.9);background:linear-gradient(transparent,rgba(0,0,0,.55))}
+.vid iframe{width:100%;max-width:520px;aspect-ratio:16/9;border:0;border-radius:8px}
+.callout .vo,.callout .vid{margin:12px 0 0}
+@media print{.vo,.vid{display:none}}
+h2.chapter{font-size:25px;margin:42px 0 6px;padding-top:14px;border-top:2px solid #e6decd;scroll-margin-top:16px}
+.chapter-lead{color:#7c7466;margin:0 0 8px;font-size:15px}
+#toc{position:sticky;top:16px;align-self:flex-start;flex:0 0 224px;max-height:calc(100vh - 32px);overflow:auto;
+background:#fff;border:1px solid #e6decd;border-radius:12px;box-shadow:0 10px 30px -16px rgba(60,45,20,.45);font-size:13px;padding:12px 11px}
+#toc h4{margin:0 0 8px;font-size:13px;color:#211d17}
+#toc button{display:none;border:0;background:transparent;font:inherit;font-weight:700;cursor:pointer;color:#211d17;padding:2px 4px}
+#toc ol{list-style:none;margin:0;padding:0;counter-reset:ch}
+#toc li{counter-increment:ch}
+#toc a{display:block;text-decoration:none;color:#5c5346;padding:6px 8px;border-radius:7px;line-height:1.3}
+#toc a::before{content:counter(ch) ". ";color:#b6ad9b}
+#toc a:hover{background:#f3f0e8}#toc a.active{background:#eef6f3;color:#0e6b58;font-weight:700}
+@media (max-width:920px){.page{display:block}#toc{position:fixed;top:14px;left:14px;z-index:40;flex:none;max-width:260px;padding:8px 10px}#toc h4{display:none}#toc button{display:block}#toc ol{display:none;max-height:70vh;overflow:auto;margin-top:6px}#toc.open ol{display:block}}
+@media print{#toc{display:none}}
+html{scroll-behavior:smooth}
+@media print{.step,.callout,h2.chapter{break-inside:avoid}.page{display:block}.col{max-width:none}}</style></head><body>
+<div class="page">
+${toc}
+<main class="col">
+<a class="home" href="./" id="homeLink">⌂ All guides</a>
+<button class="home" id="copyLinkBtn" type="button">🔗 Copy link</button>
+<a class="home" id="openTab" target="_blank" rel="noopener">↗ Open in new tab</a>
+<button class="home" id="pdfBtn" type="button">⬇ PDF</button>
+<h1>${esc(meta.title)||"Untitled guide"}</h1>${meta.desc?`<p class="lead">${esc(meta.desc)}</p>`:""}
+${meta.author?`<p class="byline">✍️ Made by ${esc(meta.author)}</p>`:""}
+${body}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
+</main>
+</div>
+<script type="application/json" id="stepsnap-data">${dataJson}<\/script>
+<script>
+(function(){
+  // Print/PDF works everywhere, even on a local file — wire it first.
+  var pdf=document.getElementById("pdfBtn"); if(pdf) pdf.onclick=function(){ window.print(); };
+  // When viewed locally (file://) the OTHER share controls don't apply — hide them.
+  if(location.protocol==="file:"){
+    ["homeLink","copyLinkBtn","openTab"].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display="none";});
+    return;
+  }
+  var openTab=document.getElementById("openTab"); if(openTab) openTab.href=location.href;
+  var btn=document.getElementById("copyLinkBtn");
+  if(btn) btn.onclick=function(){
+    var url=location.href, label=btn.textContent;
+    function done(ok){ if(ok){ btn.textContent="✓ Copied!"; setTimeout(function(){btn.textContent=label;},1600); } else { var inp=document.createElement("input"); inp.className="home"; inp.readOnly=true; inp.value=url; inp.style.width="260px"; inp.title="Press Ctrl/Cmd-C to copy"; btn.replaceWith(inp); inp.focus(); inp.select(); } }
+    function legacy(){ try{var ta=document.createElement("textarea");ta.value=url;ta.setAttribute("readonly","");ta.style.position="fixed";ta.style.top="-1000px";document.body.appendChild(ta);ta.select();ta.setSelectionRange(0,url.length);var ok=document.execCommand("copy");ta.remove();done(ok);}catch(e){done(false);} }
+    try{ if(navigator.clipboard&&window.isSecureContext){ navigator.clipboard.writeText(url).then(function(){done(true);},legacy); return; } }catch(e){}
+    legacy();
+  };
+})();
+<\/script>
+<script>
+(function(){
+  // View counter: quietly add +1 for this guide on open (fire-and-forget, ignored
+  // if the counter isn't set up or is unreachable). No personal data is sent.
+  var COUNTER=${JSON.stringify(COUNTER_URL)};
+  if(!COUNTER||COUNTER.indexOf("http")!==0||location.protocol==="file:")return;
+  var g=(location.pathname.split("/").pop()||"").toLowerCase();
+  if(!g||g.slice(-5)!==".html")return;
+  try{ fetch(COUNTER+(COUNTER.indexOf("?")<0?"?":"&")+"action=hit&guide="+encodeURIComponent(g),{mode:"no-cors"}).catch(function(){}); }catch(e){}
+})();
+<\/script>
+<script>
+(function(){
+  // Floating chapters: toggle on small screens + highlight the section in view.
+  var toc=document.getElementById("toc"); if(!toc) return;
+  var btn=document.getElementById("tocToggle");
+  if(btn) btn.onclick=function(){ var o=toc.classList.toggle("open"); btn.setAttribute("aria-expanded",o); };
+  var links=[].slice.call(toc.querySelectorAll("a"));
+  links.forEach(function(a){ a.addEventListener("click",function(){ if(window.innerWidth<=920) toc.classList.remove("open"); }); });
+  var heads=[].slice.call(document.querySelectorAll("h2.chapter"));
+  function spy(){
+    var cur=heads[0];
+    for(var i=0;i<heads.length;i++){ if(heads[i].getBoundingClientRect().top<=130) cur=heads[i]; }
+    links.forEach(function(a){ a.classList.toggle("active", !!cur && a.getAttribute("href")==="#"+cur.id); });
+  }
+  window.addEventListener("scroll",spy,{passive:true}); window.addEventListener("resize",spy); spy();
+})();
+<\/script>
+<script>
+(function(){
+  // Click a video thumbnail → swap in the YouTube player. Nothing loads from
+  // YouTube until asked, so guides stay light and open fast.
+  [].slice.call(document.querySelectorAll(".vidbtn")).forEach(function(b){
+    b.addEventListener("click",function(){
+      var id=b.getAttribute("data-yt"); if(!id) return;
+      var f=document.createElement("iframe");
+      f.src="https://www.youtube.com/embed/"+id+"?autoplay=1&rel=0";
+      f.setAttribute("allow","autoplay; encrypted-media; picture-in-picture");
+      f.setAttribute("allowfullscreen",""); f.title="Video";
+      b.replaceWith(f);
+    });
+  });
+})();
+<\/script></body></html>`;
+  return { html, fileName };
+}
+
+/* --- GIF maker: combine selected steps' screenshots into a looping animation --- */
+// Selection action bar: appears whenever ≥1 step is ticked. Combine/Add-GIF
+// need ≥2 selected steps that have screenshots; Delete works on any selection.
+function updateGifBar(){
+  const total=gifSelected.size;
+  const withImg=gifStepsForGif().length;
+  $("gifBar").classList.toggle("show", total>=1);
+  $("gifCount").textContent = total
+    ? `${total} selected` + (withImg>=2 ? "" : " · tick 2+ with screenshots to animate")
+    : "0 selected";
+  $("gifCombine").disabled = withImg<2;
+  $("gifCreate").disabled  = withImg<2;
+  $("selDelete").disabled  = total<1;
+}
+// Ticked steps that actually have a screenshot, kept in guide order.
+function gifStepsForGif(){ return ED ? ED.steps.filter(s=>gifSelected.has(s.id)&&s.img) : []; }
+function exitGifMode(){ gifSelected.clear(); } // clears the selection
+$("gifCancel").onclick=()=>{ exitGifMode(); edRender(); };
+$("selDelete").onclick=()=>{
+  const ids=new Set(gifSelected);
+  const n=ED.steps.filter(s=>ids.has(s.id)).length;
+  if(!n) return;
+  if(!confirm(`Delete ${n} selected step${n===1?"":"s"}?`)) return;
+  snap();
+  ED.steps=ED.steps.filter(s=>!ids.has(s.id));
+  gifSelected.clear();
+  edRender();
+  edStatus(`${n} step${n===1?"":"s"} deleted`);
+};
+$("gifSpeed").oninput=()=>{ $("gifSpeedVal").textContent=($("gifSpeed").value/1000).toFixed(1)+"s"; };
+// Build the animation from the ticked steps (shared by both actions below).
+async function buildTickedGif(){
+  const chosen=gifStepsForGif();
+  if(chosen.length<2) return null;
+  // Bake in any highlight/blur first, then load each image.
+  const urls=await Promise.all(chosen.map(flatten));
+  const imgs=await Promise.all(urls.map(loadImage));
+  // All frames share one size: fit each screenshot inside a common canvas
+  // (max 960px wide) on white, preserving aspect ratio.
+  const maxW=960;
+  const W=Math.min(maxW, Math.max(...imgs.map(im=>im.naturalWidth)));
+  const H=Math.round(W*Math.max(...imgs.map(im=>im.naturalHeight/im.naturalWidth)));
+  const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+  const ctx=cv.getContext("2d");
+  const frameSrc=[]; // the fitted frames, kept on the step so speed can be re-timed later
+  const frames=imgs.map(im=>{
+    ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,W,H);
+    const scale=Math.min(W/im.naturalWidth, H/im.naturalHeight);
+    const w=im.naturalWidth*scale, h=im.naturalHeight*scale;
+    ctx.drawImage(im,(W-w)/2,(H-h)/2,w,h);
+    frameSrc.push(cv.toDataURL("image/jpeg",0.72));
+    return ctx.getImageData(0,0,W,H).data;
+  });
+  const delay=+$("gifSpeed").value;
+  const bytes=StepSnapGIF.encode(frames,{ width:W, height:H, delay, loop:0 });
+  return { bytes, url: await bytesToDataUrl(bytes,"image/gif"), chosen, frameSrc, delay };
+}
+// Pull the frames back out of an existing GIF (for steps made before we started
+// storing the source frames). Uses the browser's ImageDecoder (Chrome/Edge).
+async function decodeGifFrames(dataUrl){
+  if(typeof ImageDecoder==="undefined")
+    throw new Error("this browser can't re-read the animation — remake it to change its speed");
+  const buf=await (await fetch(dataUrl)).arrayBuffer();
+  const dec=new ImageDecoder({ data:buf, type:"image/gif" });
+  await dec.tracks.ready;
+  const count=(dec.tracks.selectedTrack && dec.tracks.selectedTrack.frameCount) || 1;
+  const cv=document.createElement("canvas");
+  const urls=[];
+  for(let i=0;i<count;i++){
+    const { image }=await dec.decode({ frameIndex:i });
+    cv.width=image.displayWidth||image.codedWidth;
+    cv.height=image.displayHeight||image.codedHeight;
+    const ctx=cv.getContext("2d");
+    ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.drawImage(image,0,0);
+    urls.push(cv.toDataURL("image/jpeg",0.72));
+    image.close();
+  }
+  dec.close();
+  return urls;
+}
+// Re-encode a stored-frame GIF step at a new per-frame delay (ms), in place.
+async function reencodeGif(s, delay){
+  const imgs=await Promise.all(s.gifSrc.map(loadImage));
+  const W=imgs[0].naturalWidth, H=imgs[0].naturalHeight;
+  const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+  const ctx=cv.getContext("2d");
+  const frames=imgs.map(im=>{ ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,W,H); ctx.drawImage(im,0,0,W,H); return ctx.getImageData(0,0,W,H).data; });
+  const bytes=StepSnapGIF.encode(frames,{ width:W, height:H, delay, loop:0 });
+  s.img=await bytesToDataUrl(bytes,"image/gif");
+  s.gifDelay=delay;
+}
+// "Add as new step": append an animated overview at the end + download the .gif.
+$("gifCreate").onclick=async()=>{
+  if(gifStepsForGif().length<2) return;
+  $("gifCreate").disabled=true; edStatus("Building GIF…");
+  try{
+    const g=await buildTickedGif();
+    edDownload(edSlug(ED.title)+"-animation.gif","image/gif",g.bytes);
+    snap();
+    ED.steps.push({ id:edUid(), type:"note", title:"Animated overview", desc:"",
+                    img:g.url, gifSrc:g.frameSrc, gifDelay:g.delay, hx:.5, hy:.5, hr:.045, showHl:false, blurs:[], targets:[] });
+    exitGifMode(); edRender();
+    edStatus("GIF created ✓ (downloaded + added as a step)");
+    window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"});
+  }catch(e){
+    console.error(e);
+    edStatus(""); alert("GIF failed — try fewer or smaller steps.\n\n"+e.message);
+    $("gifCreate").disabled=false;
+  }
+};
+// "Combine into 1 step": REPLACE the ticked steps with a single animated step,
+// dropped in at the position of the first one (keeps that step's title/desc).
+$("gifCombine").onclick=async()=>{
+  const chosen=gifStepsForGif();
+  if(chosen.length<2) return;
+  $("gifCombine").disabled=true; edStatus("Combining steps…");
+  try{
+    const g=await buildTickedGif();
+    const ids=new Set(g.chosen.map(s=>s.id));
+    const idx=ED.steps.map((s,i)=>ids.has(s.id)?i:-1).filter(i=>i>=0);
+    const at=idx[0];
+    const keepTitle=ED.steps[at].title || "Animated steps";
+    const keepDesc=ED.steps[at].desc || "";
+    snap();
+    for(let k=idx.length-1;k>=0;k--) ED.steps.splice(idx[k],1); // remove high→low
+    ED.steps.splice(at,0,{ id:edUid(), type:"note", title:keepTitle, desc:keepDesc,
+                           img:g.url, gifSrc:g.frameSrc, gifDelay:g.delay, hx:.5, hy:.5, hr:.045, showHl:false, blurs:[], targets:[] });
+    exitGifMode(); edRender();
+    edStatus(g.chosen.length+" steps combined into one animated step ✓");
+    requestAnimationFrame(()=>{ const el=$("edSteps").querySelectorAll(".estep")[at]; if(el) el.scrollIntoView({block:"center",behavior:"smooth"}); });
+  }catch(e){
+    console.error(e);
+    edStatus(""); alert("Couldn't combine — try fewer or smaller steps.\n\n"+e.message);
+    $("gifCombine").disabled=false;
+  }
+};
+function loadImage(src){ return new Promise((res,rej)=>{
+  if(!src) return rej(new Error("no image"));
+  const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=src;
+}); }
+function bytesToDataUrl(bytes,mime){ return new Promise(res=>{
+  const r=new FileReader(); r.onload=()=>res(r.result);
+  r.readAsDataURL(new Blob([bytes],{type:mime}));
+}); }
+function edDownload(name,mime,content){
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([content],{type:mime}));
+  a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+}
+
+/* --- copy the whole guide to the clipboard (paste into Gmail/Docs/Word) --- */
+$("edCopyBtn").onclick=async()=>{
+  if(!ED) return;
+  edStatus("Preparing copy…");
+  const steps=ED.steps;
+  const imgs=await Promise.all(steps.map(flatten));
+  let n=0;
+  let html=`<h1>${esc(ED.title)||"Untitled guide"}</h1>`+(ED.desc?`<p>${esc(ED.desc)}</p>`:"");
+  let text=`${ED.title||"Untitled guide"}\n\n`;
+  steps.forEach((s,i)=>{
+    if(s.type==="chapter"){
+      n=0;
+      html+=`<h2>${linkify(s.title)}</h2>`+(s.desc?`<p>${linkifyML(s.desc)}</p>`:"");
+      text+=`\n${s.title}\n\n`;
+      return;
+    }
+    const label=s.type==="nav"?"→":(calloutIcon[s.type]||`${++n}.`);
+    html+=`<h3>${label} ${linkify(s.title)}</h3>`;
+    if(s.desc) html+=`<p>${linkifyML(s.desc)}</p>`;
+    if(imgs[i]) html+=`<p><img src="${imgs[i]}" style="max-width:620px;width:100%"></p>`;
+    text+=`${label} ${s.title}\n${s.desc?s.desc+"\n":""}\n`;
+  });
+  try{
+    await navigator.clipboard.write([new ClipboardItem({
+      "text/html": new Blob([html],{type:"text/html"}),
+      "text/plain": new Blob([text],{type:"text/plain"}),
+    })]);
+    edStatus("Copied ✓ — paste into a Doc or email");
+  }catch(e){
+    console.error(e);
+    edStatus("Copy failed — click anywhere on the page once, then try again");
+  }
+};
+
+/* --- download the guide as Markdown --- */
+$("edMdBtn").onclick=async()=>{
+  if(!ED) return;
+  edStatus("Building Markdown…");
+  const steps=ED.steps;
+  const imgs=await Promise.all(steps.map(flatten));
+  let n=0;
+  let md=`# ${ED.title||"Untitled guide"}\n\n${ED.desc?ED.desc+"\n\n":""}`;
+  steps.forEach((s,i)=>{
+    if(s.type==="chapter"){ n=0; md+=`## ${s.title}\n\n`; if(s.desc) md+=s.desc+"\n\n"; return; }
+    const label=s.type==="nav"?"→":(calloutIcon[s.type]||`${++n}.`);
+    md+=`### ${label} ${s.title}\n\n`;
+    if(s.desc) md+=s.desc+"\n\n";
+    if(imgs[i]) md+=`![Step screenshot](${imgs[i]})\n\n`;
+  });
+  edDownload(edSlug(ED.title)+".md","text/markdown",md);
+  edStatus("Markdown downloaded ⬇");
+};
+
+/* --- open / publish / navigate --- */
+function showEditor(where){
+  exitGifMode();
+  edUndoStack=[]; updateUndoBtn(); edDirty=false;
+  $("app").classList.add("hidden"); $("editor").classList.remove("hidden");
+  $("edWhere").textContent=where||"";
+  $("edTitle").value=ED.title; $("edDesc").value=ED.desc; $("edAuthor").value=ED.author; $("edUnlisted").checked=!!ED.unlisted;
+  edStatus(""); edRender(); window.scrollTo(0,0);
+}
+function showApp(){ exitGifMode(); edUndoStack=[]; edDirty=false; $("editor").classList.add("hidden"); $("app").classList.remove("hidden"); ED=null; window.scrollTo(0,0); }
+
+async function edOpen(pathOrFile, isDraft){
+  status("Opening editor…");
+  try{
+    const f=await ghGet(pathOrFile);
+    if(!f){ alert("Couldn't find that file on the site."); return; }
+    if(!f.text){
+      alert("Couldn't download the guide's contents.\n\n(admin build "+ADMIN_BUILD+
+            " — methods tried: "+((f.tried&&f.tried.join(", "))||"none")+")\n\n"+
+            "Please send this exact message to Claude Code.");
+      return;
+    }
+    const doc=new DOMParser().parseFromString(f.text,"text/html");
+    const el=doc.getElementById("stepsnap-data");
+    if(!el){
+      alert("Downloaded the guide ("+f.text.length.toLocaleString()+" characters via "+f.via+
+            ", admin build "+ADMIN_BUILD+") but it has no editable data block — it was "+
+            "probably exported before round-trip editing existed (v2.0).\n\n"+
+            "Open it in the extension once (My guides → 🌐 Open a published guide…), "+
+            "re-publish it, and it'll be editable here from then on.");
+      return;
+    }
+    const p=JSON.parse(el.textContent);
+    ED={ file:(p.file || (isDraft?null:pathOrFile)), draftPath:(isDraft?pathOrFile:null),
+      title:p.title||"", desc:p.desc||"",
+      // No author yet? Pre-fill the name this person last used on this device.
+      author:p.author||localStorage.getItem("stepsnapAuthor")||"", unlisted:!!p.unlisted,
+      steps:(p.steps||[]).map(s=>({ ...s, blurs:s.blurs||[],
+        // Migrate the legacy single highlight into the multi-target list.
+        targets: Array.isArray(s.targets) ? s.targets
+          : (s.showHl ? [{ shape:"circle", x:(typeof s.hx==="number"?s.hx:.5),
+                           y:(typeof s.hy==="number"?s.hy:.5), r:(s.hr||0.045), color:"#f97316" }] : []) })) };
+    if(!ED.file) ED.file=edSlug(ED.title)+".html";
+    showEditor(isDraft ? ("Draft “"+pathOrFile.replace(/^drafts\//,"")+"” — publishing will post it live and remove the draft.")
+                       : ("Editing the live guide “"+pathOrFile+"” — publishing overwrites it."));
+  }catch(e){ console.error(e); alert("Couldn't open for editing.\n\n"+e.message); }
+  finally{ status(""); }
+}
+
+async function edPublish(){
+  if(!ED) return;
+  if(!ED.title.trim()){ alert("Give the guide a title first."); $("edTitle").focus(); return; }
+  const title=ED.title, draftPath=ED.draftPath;
+  edStatus("Building…");
+  try{
+    const { html, fileName }=await edBuildExport();
+    const existing=await ghGet(fileName);
+    // Confirm an overwrite only when publishing a DRAFT onto an existing live
+    // guide. Editing a live guide in place is a deliberate overwrite — no prompt.
+    if(existing && draftPath){
+      const mm=existing.text.match(/stepsnap-author" content="([^"]*)"/);
+      const who=mm&&mm[1]?` (made by ${mm[1]})`:"";
+      if(!confirm(`A live guide “${fileName}”${who} already exists.\n\nReplace it with this version?`)){ edStatus(""); return; }
+    }
+    edStatus("Publishing…");
+    await ghPut(fileName, html, existing?existing.sha:null, "Publish "+fileName);
+  }catch(e){ console.error(e); edStatus(""); alert("Couldn't publish.\n\n"+e.message); return; }
+  // The guide is LIVE from here on. Clearing the draft is only cleanup, so a
+  // failure here must never be reported as "couldn't publish" (it used to be,
+  // which made a successful publish look broken).
+  if(draftPath){
+    try{ const d=await ghGet(draftPath); if(d) await ghDelete(draftPath, d.sha, "Remove draft "+draftPath); }
+    catch(e){
+      console.error(e);
+      alert(`Published “${title}” ✓\n\nOne loose end: the old copy in 📥 Drafts couldn’t be removed `
+           +`(${e.message}).\n\nThe guide is live — just Discard that draft from the Drafts list.`);
+      edStatus("Published ✓"); showApp(); loadAll().catch(()=>{}); return;
+    }
+  }
+  // Published OK — refreshing the list is best-effort and must not look like a failure.
+  edStatus("Published ✓"); showApp(); loadAll().catch(()=>{});
+  alert(`Published “${title}” ✓\n\nIt’s live on the site in about a minute.`);
+}
+
+/* --- drafts (the extension's “Push draft” inbox) --- */
+async function loadDrafts(){
+  const host=$("draftList");
+  try{
+    const res=await gh(`/contents/drafts`);
+    if(res.status===404){ host.innerHTML='<span class="note">No drafts yet. In the extension editor, click <b>📤 Push draft</b> to send one here.</span>'; return; }
+    if(!res.ok) throw new Error("GitHub "+res.status);
+    const items=await res.json();
+    renderDrafts(items.filter(it=>it.type==="file" && /\.html$/i.test(it.name)));
+  }catch(e){ host.innerHTML='<span class="note">Couldn’t load drafts ('+escapeHtml(e.message)+').</span>'; }
+}
+function renderDrafts(drafts){
+  const host=$("draftList"); host.innerHTML="";
+  if(!drafts.length){ host.innerHTML='<span class="note">No drafts yet. In the extension editor, click <b>📤 Push draft</b> to send one here.</span>'; return; }
+  drafts.forEach(d=>{
+    const row=document.createElement("div"); row.className="row";
+    const info=document.createElement("div"); info.className="info";
+    const b=document.createElement("b"); b.textContent=d.name.replace(/\.html$/i,"");
+    const s=document.createElement("span"); s.textContent="drafts/"+d.name;
+    info.append(b,s);
+    const acts=document.createElement("div"); acts.className="acts";
+    acts.append(
+      mkBtn("✏️ Open & edit", ()=>edOpen("drafts/"+d.name, true)),
+      mkBtn("🗑 Discard", ()=>act(async()=>{ if(!confirm(`Discard draft “${d.name}”? This can't be undone.`)) return false;
+        const f=await ghGet("drafts/"+d.name); if(f) await ghDelete("drafts/"+d.name, f.sha, "Discard draft "+d.name); }), true)
+    );
+    row.append(info,acts); host.append(row);
+  });
+}
+
+/* wire the editor's own controls (once) */
+$("edTitle").oninput=e=>{ if(ED){ ED.title=e.target.value; edDirty=true; } };
+$("edDesc").oninput=e=>{ if(ED){ ED.desc=e.target.value; edDirty=true; } };
+$("edAuthor").oninput=e=>{ if(ED){ ED.author=e.target.value; edDirty=true;
+  // Remember the name on this device so future guides pre-fill it.
+  try{ localStorage.setItem("stepsnapAuthor", e.target.value.trim()); }catch(x){} } };
+$("edUnlisted").onchange=e=>{ if(ED){ ED.unlisted=e.target.checked; edDirty=true; } };
+/* --- ❓ help: a legend of every icon/button, per screen --- */
+const HELP_ADMIN=[
+  ["group","Drafts (pushed from the extension)"],
+  ["✏️ Open & edit","load the draft into the editor to finish it"],
+  ["🗑 Discard","delete the draft (the live site is untouched)"],
+  ["group","Guides (live on the site)"],
+  ["✏️ Edit","open the live guide in the editor — publishing overwrites it"],
+  ["↗ Open","view the live guide page"],
+  ["🙈 Unlist / 👁 List","hide from the homepage but keep the link working / bring it back"],
+  ["✎ Rename","change the guide's web address (its filename)"],
+  ["🔗 Copy","copy the guide's shareable link"],
+  ["🗑 Remove","take the guide off the live site"],
+  ["↑ ↓ and ⭐","arrange the homepage order and star the featured row…"],
+  ["Save layout","…then this stores that arrangement"],
+  ["group","🏷️ Collections"],
+  ["＋ New collection","start a named group (e.g. a migration), then tick which guides belong"],
+  ["🔗 Copy link","copy that group's shareable link (opens a mini homepage of just those guides)"],
+  ["💾 Save collections","publish your groups — guides stay on the main site, unchanged"],
+  ["group","Top bar & tools"],
+  ["🩺 Run check","scan every live guide for missing pieces"],
+  ["↻ Refresh","reload the lists"],
+  ["🔒 Lock","log out on this device (password unlocks again)"],
+  ["🎓 Tutorial","the full start-to-finish walkthrough"],
+];
+const HELP_EDITOR=[
+  ["group","The guide's details (top card)"],
+  ["Made by","your name — it shows on the guide page and its homepage tile, and this device remembers it for your next guides"],
+  ["🙈 Unlisted","keep the guide's link working but hide it from the homepage"],
+  ["group","On each step card"],
+  ["☑ checkbox","tick the box on the left to select steps — a bar slides up from the bottom to Combine them into a GIF, add a GIF, or delete them (set the GIF speed there too)"],
+  ["● Step ▾","turn the card into a 📖 Chapter heading or a 💡 Tip / ⚠️ Alert / 🔔 Warning note"],
+  ["↑ ↓","move the step (you can also drag its number badge)"],
+  ["📷","add or replace the screenshot with an image file"],
+  ["⧉","duplicate the step"],
+  ["✕","delete the step"],
+  ["🎙 Record voice-over","record narration for this step from your mic — viewers get a ▶ play button on the published step"],
+  ["🎬 Paste a YouTube link","attach a “watch this for more info” video to the step (or a Tip) — it shows as a thumbnail with a play button"],
+  ["+ Step · 📖 Chapter","the faint dashed bars between cards insert right at that spot"],
+  ["group","On the screenshot"],
+  ["🎯 Add circle","a click-here ring — drag it into place"],
+  ["▭ Draw box","drag on the image to outline an area"],
+  ["➤ Arrow","drag from the arrow's tail to its tip"],
+  ["🔤 Label","a text sign — type its wording in the tool-bar box"],
+  ["colour square","recolours the selected shape (and new ones)"],
+  ["shape's ✕","deletes that one shape"],
+  ["corner square","resizes the selected shape (on an arrow it moves the tip)"],
+  ["🌫 Blur","drag over anything sensitive — hidden permanently when published"],
+  ["🖼✕","remove the screenshot from this step"],
+  ["group","Top bar"],
+  ["↩ Undo","undo the last edit (also Cmd/Ctrl+Z)"],
+  ["🔗 Combine into GIF","(bottom bar) merge the selected steps into ONE animated step"],
+  ["➕ Add GIF as step","(bottom bar) add the animation as a new step, keeping the selected ones"],
+  ["🗑 Delete selected","(bottom bar) delete every selected step at once"],
+  ["🎞 animation speed","on ANY GIF step, a slider re-times it anytime — bigger = slower (up to 6s per frame); older GIFs are re-read automatically on first change"],
+  ["💾 Save draft","save your progress without publishing — reopen it later from 📥 Drafts"],
+  ["📋 Copy guide","copy everything, formatted — paste into Gmail / Docs / Word"],
+  ["⬇ Markdown","download the guide as a text file with images"],
+  ["🚀 Publish","put the guide live on the site (a finished draft cleans itself up)"],
+];
+function showHelp(kind){
+  const list=kind==="editor"?HELP_EDITOR:HELP_ADMIN;
+  $("helpTitle").textContent=kind==="editor"?"The editor, button by button":"The admin, button by button";
+  const body=$("helpBody"); body.innerHTML="";
+  list.forEach(([a,b])=>{
+    if(a==="group"){ const g=document.createElement("div"); g.className="hgroup"; g.textContent=b; body.append(g); return; }
+    const row=document.createElement("div"); row.className="hrow";
+    const ic=document.createElement("b"); ic.textContent=a;
+    const tx=document.createElement("span"); tx.textContent=b;
+    row.append(ic,tx); body.append(row);
+  });
+  $("helpOv").classList.remove("hidden");
+}
+$("helpAdminBtn").onclick=()=>showHelp("admin");
+$("helpEdBtn").onclick=()=>showHelp("editor");
+$("helpClose").onclick=()=>$("helpOv").classList.add("hidden");
+$("helpOv").onclick=(e)=>{ if(e.target.id==="helpOv") $("helpOv").classList.add("hidden"); };
+window.addEventListener("keydown",(e)=>{ if(e.key==="Escape") $("helpOv").classList.add("hidden"); });
+
+$("edBack").onclick=()=>{
+  if(edDirty && !confirm("You have unsaved changes.\n\nLeave and discard them?\n(Use 💾 Save draft to keep your progress and come back later.)")) return;
+  showApp();
+};
+$("edUndoBtn").onclick=undo;
+$("edPublish").onclick=edPublish;
+
+/* --- 💾 Save draft: persist the current edits to drafts/ WITHOUT publishing.
+   Reopen later from 📥 Drafts to keep editing; publishing still posts it live. --- */
+$("edSaveBtn").onclick=async()=>{
+  if(!ED) return;
+  if(!ED.title.trim()){ alert("Give the guide a title first."); $("edTitle").focus(); return; }
+  edStatus("Saving draft…");
+  try{
+    const { html, fileName }=await edBuildExport();
+    const path="drafts/"+fileName;
+    const existing=await ghGet(path);
+    await ghPut(path, html, existing?existing.sha:null, "Save draft "+fileName);
+    ED.draftPath=path; ED.file=fileName; // it's now a reopenable draft
+    edDirty=false;
+    edStatus("Draft saved ✓ — safe to leave; reopen from 📥 Drafts");
+  }catch(e){ console.error(e); edStatus(""); alert("Couldn't save the draft.\n\n"+e.message); }
+};
+$("edAddStep").onclick=()=>{ if(!ED) return; snap(); ED.steps.push(edBlank("note","New step")); edRender(); window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"}); };
+$("edAddChapter").onclick=()=>{ if(!ED) return; snap(); ED.steps.push(edBlank("chapter","New chapter")); edRender(); window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"}); };
+
+/* ===== gate (setup / login) ===== */
+function showGate(){
+  $("gateBuild").textContent = "admin build " + ADMIN_BUILD;
+  const saved = JSON.parse(localStorage.getItem(LS_KEY) || "null");
+  $("app").classList.add("hidden"); $("gate").classList.remove("hidden");
+  if(saved && saved.enc){ REPO=saved.repo||REPO; $("login").classList.remove("hidden"); $("setup").classList.add("hidden"); $("liPass").focus(); }
+  else{ $("setup").classList.remove("hidden"); $("login").classList.add("hidden"); }
+}
+function enterApp(){ $("gate").classList.add("hidden"); $("app").classList.remove("hidden");
+  loadAll().catch(e=>{ if(e.message==="auth"){ alert("Your saved key was rejected by GitHub. Reset this device and re-enter the team key."); } else { alert("Couldn't load: "+e.message); } }); }
+
+$("suGo").onclick = async ()=>{
+  const token=$("suToken").value.trim(), repo=$("suRepo").value.trim()||"jfroelic-prog/guides";
+  const p=$("suPass").value, p2=$("suPass2").value;
+  if(!token){ $("suErr").textContent="Paste your team key."; return; }
+  if(p.length<6){ $("suErr").textContent="Use a password of at least 6 characters."; return; }
+  if(p!==p2){ $("suErr").textContent="Passwords don't match."; return; }
+  $("suErr").textContent="";
+  const encObj=await encryptToken(token, p);
+  localStorage.setItem(LS_KEY, JSON.stringify({ repo, enc:encObj }));
+  TOKEN=token; REPO=repo; enterApp();
+};
+$("liGo").onclick = async ()=>{
+  const saved=JSON.parse(localStorage.getItem(LS_KEY)||"null"); if(!saved){ showGate(); return; }
+  try{ TOKEN=await decryptToken(saved.enc, $("liPass").value); REPO=saved.repo||REPO; $("liErr").textContent=""; enterApp(); }
+  catch(e){ $("liErr").textContent="Wrong password — try again."; }
+};
+$("liPass").addEventListener("keydown",e=>{ if(e.key==="Enter") $("liGo").click(); });
+$("forget").onclick = (e)=>{ e.preventDefault(); if(confirm("Reset this device? You'll re-enter the team key and set a new password.")){ localStorage.removeItem(LS_KEY); TOKEN=""; showGate(); } };
+$("lock").onclick = ()=>{ TOKEN=""; showGate(); };
+$("refresh").onclick = ()=>loadAll().catch(e=>alert(e.message));
+
+showGate();
+</script>
+</body>
+</html>

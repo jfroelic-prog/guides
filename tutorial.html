@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>StepSnap — Tutorial</title>
+<style>
+  :root{ --paper:#f7f2e9; --card:#fffdf8; --ink:#211d17; --muted:#7c7466;
+    --line:#e6decd; --accent:#d23f31; --teal:#0e6b58; --gold:#c79a3b;
+    --font:"Century Gothic",CenturyGothic,"URW Gothic","Avant Garde",Futura,"Trebuchet MS",sans-serif; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--paper); color:var(--ink); font:16px/1.55 var(--font);
+    background-image:radial-gradient(rgba(120,100,60,.05) 1px, transparent 1px); background-size:22px 22px;
+    min-height:100vh; display:flex; flex-direction:column; }
+  main{ flex:1; width:100%; max-width:680px; margin:0 auto; padding:30px 20px 10px; }
+  h1{ font-size:24px; margin:0 0 2px; } h1 span{ color:var(--accent); }
+  .sub{ color:var(--muted); font-size:13px; margin:0 0 18px; }
+
+  .slide{ display:none; background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:26px 28px; box-shadow:0 10px 30px -18px rgba(60,45,20,.4); animation:in .18s ease-out; }
+  .slide.on{ display:block; }
+  @keyframes in{ from{ opacity:.4; transform:translateY(6px);} to{ opacity:1; transform:none;} }
+  .slide h2{ margin:0 0 10px; font-size:21px; }
+  .slide p{ margin:8px 0; font-size:15px; }
+  .slide ol, .slide ul{ margin:8px 0; padding-left:22px; font-size:15px; }
+  .slide li{ margin:7px 0; }
+  .k{ display:inline-block; background:#f1ece0; border:1px solid var(--line); border-radius:7px;
+    padding:1px 8px; font-size:13.5px; white-space:nowrap; }
+  .note{ font-size:13px; color:var(--muted); }
+  .tipbox{ background:#eef6f3; border:1px solid #bfe0d6; border-radius:10px; padding:10px 14px;
+    font-size:13.5px; margin-top:14px; }
+
+  /* little mock visuals */
+  .mock{ margin:16px 0 4px; border:1px solid var(--line); border-radius:12px; background:var(--paper);
+    padding:14px; }
+  .mock .mbtn{ display:block; width:100%; text-align:center; border-radius:9px; padding:10px;
+    font-weight:700; color:#fff; margin-bottom:8px; }
+  .mock .rec{ background:var(--teal); } .mock .stop{ background:var(--accent); }
+  .mrow{ display:flex; gap:8px; align-items:center; background:var(--card); border:1px solid var(--line);
+    border-radius:9px; padding:6px 8px; margin-top:7px; font-size:13px; }
+  .mrow .n{ flex:none; width:20px; height:20px; border-radius:50%; background:var(--accent); color:#fff;
+    display:grid; place-items:center; font-size:11px; font-weight:700; }
+  .mrow .ph{ flex:none; width:52px; height:34px; border-radius:5px; background:#eae4d6; border:1px solid var(--line); }
+  .mrow .x{ margin-left:auto; color:#9a4034; border:1px solid var(--line); border-radius:5px; padding:0 6px; }
+  .shot{ position:relative; height:190px; border-radius:9px; background:#eef1f5; border:1px solid var(--line);
+    overflow:hidden; }
+  .shot .bar{ position:absolute; left:6%; right:6%; top:9%; height:16%; background:#fff; border-radius:4px; }
+  .shot .btnb{ position:absolute; right:8%; top:12%; width:17%; height:10%; background:#3b5b92; border-radius:3px; }
+  .shot .circ{ position:absolute; right:5.5%; top:6%; width:22%; aspect-ratio:1; border:3px solid #f97316; border-radius:50%; }
+  .shot .arr{ position:absolute; left:34%; top:52%; width:38%; height:0; border-top:3px solid #d23f31;
+    transform:rotate(-24deg); transform-origin:0 50%; }
+  .shot .arr::after{ content:""; position:absolute; right:-3px; top:-7px; border-top:6px solid transparent;
+    border-bottom:6px solid transparent; border-left:11px solid #d23f31; }
+  .shot .lab{ position:absolute; left:9%; top:58%; background:#0e6b58; color:#fff; font-weight:700;
+    font-size:13px; border-radius:7px; padding:4px 10px; }
+  .shot .blr{ position:absolute; left:12%; top:32%; width:26%; height:13%; border-radius:3px;
+    background:repeating-linear-gradient(45deg,#cfc9bb,#cfc9bb 3px,#dfd9cb 3px,#dfd9cb 6px); }
+  .iconlist{ list-style:none; padding:0; margin:10px 0 0; }
+  .iconlist li{ display:flex; gap:10px; margin:8px 0; font-size:14.5px; align-items:baseline; }
+  .iconlist b{ flex:none; min-width:96px; font-weight:700; }
+
+  /* nav */
+  .nav{ max-width:680px; margin:14px auto 34px; padding:0 20px; display:flex; align-items:center; gap:12px; }
+  .nav button{ border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:9px;
+    padding:10px 18px; font:700 14px var(--font); cursor:pointer; }
+  .nav button:hover{ border-color:var(--gold); }
+  .nav .next{ background:var(--ink); color:var(--paper); border-color:var(--ink); margin-left:auto; }
+  .nav .next:hover{ border-color:var(--ink); }
+  .dots{ display:flex; gap:6px; flex:1; justify-content:center; flex-wrap:wrap; }
+  .dots i{ width:9px; height:9px; border-radius:50%; background:#ded6c4; cursor:pointer; }
+  .dots i.on{ background:var(--teal); transform:scale(1.25); }
+  .count{ font-size:12px; color:var(--muted); white-space:nowrap; }
+  @media (max-width:560px){ .slide{ padding:20px; } .iconlist b{ min-width:80px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Step<span>Snap</span> Tutorial</h1>
+  <p class="sub">The whole journey, start to finish. Keep this tab open beside StepSnap while you try each step — use the buttons below or your ← → arrow keys.</p>
+
+  <!-- 1 -->
+  <section class="slide">
+    <h2>🎉 Welcome to StepSnap</h2>
+    <p>StepSnap turns the clicks you make in Chrome into an illustrated, step-by-step guide — then publishes it to our team help site where anyone can read it.</p>
+    <p>The flow is always the same:</p>
+    <ol>
+      <li><b>Record</b> your clicks with the extension.</li>
+      <li><b>Push</b> the draft to the site.</li>
+      <li><b>Edit &amp; publish</b> in the web editor.</li>
+      <li><b>Share</b> the guide's link.</li>
+    </ol>
+    <div class="tipbox">💡 This tutorial matches the buttons exactly — when you see <span class="k">📤 Push draft &amp; edit on site</span> here, that's the real button's name.</div>
+  </section>
+
+  <!-- 2 -->
+  <section class="slide">
+    <h2>1 · Install the extension (once)</h2>
+    <ol>
+      <li>Unzip the StepSnap kit somewhere you'll keep it.</li>
+      <li>In Chrome, open <span class="k">chrome://extensions</span> and switch on <b>Developer mode</b> (top-right).</li>
+      <li>Click <span class="k">Load unpacked</span> and choose the kit's <b>extension</b> folder.</li>
+      <li>Click the puzzle-piece 🧩 in Chrome's toolbar and <b>pin</b> StepSnap 📌.</li>
+    </ol>
+    <p class="note">After any update to the extension files, revisit chrome://extensions and press its ↻ reload icon.</p>
+  </section>
+
+  <!-- 3 -->
+  <section class="slide">
+    <h2>2 · Connect publishing (once)</h2>
+    <ol>
+      <li>Click the <b>StepSnap icon</b> — the recorder panel opens on the right.</li>
+      <li>Click the <span class="k">⚙</span> gear at the bottom of the panel.</li>
+      <li>Paste the <b>team key</b> from your setup sheet, then <span class="k">Save</span>.</li>
+    </ol>
+    <p>That's it — the panel can now send guides to the team site.</p>
+    <div class="tipbox">🔑 The team key is shared by our whole team. Keep it off public documents; your admin can replace it at any time.</div>
+  </section>
+
+  <!-- 4 -->
+  <section class="slide">
+    <h2>3 · Record your clicks</h2>
+    <div class="mock">
+      <span class="mbtn stop">⏹ Stop recording</span>
+      <div class="mrow"><span class="n">1</span><span class="ph"></span> Click the "Sign in" button <span class="x">✕</span></div>
+      <div class="mrow"><span class="n">2</span><span class="ph"></span> Click "Settings" <span class="x">✕</span></div>
+    </div>
+    <ol>
+      <li>Press <span class="k">⏺ Start recording</span> in the panel.</li>
+      <li>Do your task normally, in any tab — <b>every click becomes a step</b> with a screenshot and auto-written text, appearing live in the panel.</li>
+      <li>Press <span class="k">⏹ Stop recording</span> when you're done.</li>
+    </ol>
+    <p class="note">Starting again later? Start always begins a clean slate (it asks before clearing leftover steps).</p>
+  </section>
+
+  <!-- 5 -->
+  <section class="slide">
+    <h2>4 · Tidy right in the panel</h2>
+    <ul class="iconlist">
+      <li><b>✕</b> delete a step you didn't mean to record</li>
+      <li><b>↑ ↓</b> move a step earlier or later</li>
+      <li><b>⇣ Import Scribe</b> pull in an old Scribe guide (open it in a tab first)</li>
+      <li><b>🔧 Test this tab</b> if clicks ever stop recording, this tells you why</li>
+      <li><b>🗑 Clear all</b> throw everything away and start over</li>
+    </ul>
+    <p class="note">Only quick fixes happen here — all the real editing tools live on the web, next.</p>
+  </section>
+
+  <!-- 6 -->
+  <section class="slide">
+    <h2>5 · Push the draft to the site</h2>
+    <ol>
+      <li>Click <span class="k">📤 Push draft &amp; edit on site</span>.</li>
+      <li><b>Name the guide</b> — this becomes its title and its web address.</li>
+      <li>Click <span class="k">📤 Push it</span>. The web Admin opens in a new tab, and the panel clears itself (your draft is safe on the site).</li>
+    </ol>
+    <div class="tipbox">🔒 Drafts are private — they never appear on the public homepage until you publish.</div>
+  </section>
+
+  <!-- 7 -->
+  <section class="slide">
+    <h2>6 · Log in to the web Admin</h2>
+    <ul>
+      <li><b>First time on a computer:</b> paste the <b>team key</b> and choose a <b>password</b> of your own for that device.</li>
+      <li><b>Every time after:</b> just your password.</li>
+    </ul>
+    <p class="note">The small “admin build …” line on the login screen tells you which version you're running — handy if something ever looks out of date.</p>
+  </section>
+
+  <!-- 8 -->
+  <section class="slide">
+    <h2>7 · Open your draft</h2>
+    <p>In the Admin, find the <b>📥 Drafts</b> list — your pushed guide is waiting there.</p>
+    <p>Click <span class="k">✏️ Open &amp; edit</span> to load it into the editor.</p>
+    <p class="note">Already-published guides are edited the same way: find them under <b>🗂 Guides</b> and click ✏️ Edit.</p>
+  </section>
+
+  <!-- 9 -->
+  <section class="slide">
+    <h2>8 · Write and organise the steps</h2>
+    <ul class="iconlist">
+      <li><b>titles &amp; text</b> click any title or description and type</li>
+      <li><b>● Step ▾</b> the dropdown turns a step into a 📖 Chapter heading or a 💡 Tip / ⚠️ Alert / 🔔 Warning note</li>
+      <li><b>↑ ↓ / drag</b> reorder steps (grab the number badge to drag)</li>
+      <li><b>+ Step · 📖 Chapter</b> the faint dashed bars <i>between</i> cards insert right there</li>
+      <li><b>⧉</b> duplicate a step &nbsp;·&nbsp; <b>✕</b> delete it</li>
+    </ul>
+    <p class="note">Chapters give long guides a floating table of contents, and step numbers restart in each chapter.</p>
+  </section>
+
+  <!-- 10 -->
+  <section class="slide">
+    <h2>9 · Annotate the screenshots</h2>
+    <div class="mock"><div class="shot">
+      <div class="bar"></div><div class="btnb"></div><div class="circ"></div>
+      <div class="arr"></div><div class="lab">Click Save here</div><div class="blr"></div>
+    </div></div>
+    <ul class="iconlist">
+      <li><b>🎯 Add circle</b> a click-here ring (drag it into place)</li>
+      <li><b>▭ Draw box</b> drag to outline an area</li>
+      <li><b>➤ Arrow</b> drag from the arrow's tail to its tip</li>
+      <li><b>🔤 Label</b> a little text sign — type its wording in the tool bar box</li>
+      <li><b>colour square</b> recolours the selected shape</li>
+      <li><b>🌫 Blur</b> drag over anything sensitive — hidden for good when published</li>
+      <li><b>📷</b> replace the screenshot with an image file</li>
+      <li><b>🖼✕</b> remove the screenshot</li>
+    </ul>
+    <p class="note">Drag any shape to move it · the little corner square resizes it (or moves an arrow's tip) · its ✕ deletes it · <b>↩ Undo</b> fixes mistakes.</p>
+  </section>
+
+  <!-- 11 -->
+  <section class="slide">
+    <h2>10 · Nice extras</h2>
+    <ul class="iconlist">
+      <li><b>🎞 GIF</b> tick a few steps and combine them into a looping animation</li>
+      <li><b>📋 Copy guide</b> copies the whole formatted guide — paste into Gmail, Google Docs, or Word</li>
+      <li><b>⬇ Markdown</b> downloads the guide as a text file with images</li>
+    </ul>
+  </section>
+
+  <!-- 12 -->
+  <section class="slide">
+    <h2>11 · Publish 🚀</h2>
+    <ol>
+      <li>Type your name in <span class="k">Made by</span> so the guide shows who wrote it.</li>
+      <li>Click <span class="k">🚀 Publish</span>.</li>
+      <li>The guide is live on the team site about a minute later, and the draft cleans itself up.</li>
+    </ol>
+    <p class="note">Publishing again with the same guide updates the same web address — links you've shared keep working.</p>
+  </section>
+
+  <!-- 13 -->
+  <section class="slide">
+    <h2>12 · Share it</h2>
+    <ul class="iconlist">
+      <li><b>🔗 Copy</b> on the guide's row in the Admin — or on its homepage tile, or on the guide page itself — copies the link to send out</li>
+      <li><b>⬇ PDF</b> on every guide page saves a printable copy</li>
+      <li><b>Google Sites</b> the whole homepage can be embedded: Insert → Embed → By URL → whole page</li>
+    </ul>
+  </section>
+
+  <!-- 14 -->
+  <section class="slide">
+    <h2>13 · Manage the site (admins)</h2>
+    <ul class="iconlist">
+      <li><b>↑↓ + ⭐</b> arrange the homepage order, star the featured row, then <b>Save layout</b></li>
+      <li><b>🙈 Unlist</b> keep a guide's link alive but hide it from the homepage</li>
+      <li><b>✎ Rename</b> change a guide's web address &nbsp;·&nbsp; <b>🗑 Remove</b> take it off the site</li>
+      <li><b>🩺 Health check</b> scans every live guide for problems</li>
+    </ul>
+    <h2 style="margin-top:22px">You're ready! 🎉</h2>
+    <p>Wherever you are in StepSnap, the <b>❓</b> button shows a quick reminder of what every icon does — and this tutorial is always at <span class="k">…/tutorial.html</span> on the team site.</p>
+  </section>
+</main>
+
+<div class="nav">
+  <button id="back">← Back</button>
+  <div class="dots" id="dots"></div>
+  <span class="count" id="count"></span>
+  <button class="next" id="next">Next →</button>
+</div>
+
+<script>
+(function(){
+  var slides=[].slice.call(document.querySelectorAll(".slide"));
+  var dots=document.getElementById("dots"), count=document.getElementById("count");
+  var back=document.getElementById("back"), next=document.getElementById("next");
+  var cur=0;
+  slides.forEach(function(_,i){
+    var d=document.createElement("i");
+    d.onclick=function(){ go(i); };
+    dots.append(d);
+  });
+  function go(i){
+    cur=Math.max(0, Math.min(slides.length-1, i));
+    slides.forEach(function(s,j){ s.classList.toggle("on", j===cur); });
+    [].slice.call(dots.children).forEach(function(d,j){ d.classList.toggle("on", j===cur); });
+    count.textContent=(cur+1)+" / "+slides.length;
+    back.style.visibility=cur===0?"hidden":"visible";
+    next.textContent=cur===slides.length-1?"Done ✓":"Next →";
+    window.scrollTo({top:0});
+  }
+  back.onclick=function(){ go(cur-1); };
+  next.onclick=function(){ if(cur===slides.length-1){ go(0); } else { go(cur+1); } };
+  window.addEventListener("keydown",function(e){
+    if(e.key==="ArrowRight") go(cur+1);
+    if(e.key==="ArrowLeft") go(cur-1);
+  });
+  go(0);
+})();
+</script>
+</body>
+</html>

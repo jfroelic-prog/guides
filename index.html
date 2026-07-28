@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guides</title>
+<style>
+  :root{ --paper:#f7f2e9; --card:#fffdf8; --ink:#211d17; --muted:#7c7466;
+         --line:#e6decd; --accent:#d23f31; --teal:#0e6b58; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--paper); color:var(--ink);
+        /* District brand font (Century Gothic) with geometric fallbacks. */
+        font:16px/1.55 "Century Gothic",CenturyGothic,"URW Gothic","Avant Garde",Futura,"Trebuchet MS",sans-serif;
+        background-image:radial-gradient(rgba(120,100,60,.05) 1px, transparent 1px);
+        background-size:22px 22px; }
+  main{ max-width:1000px; margin:0 auto; padding:56px 22px 100px; }
+  h1{ font-size:clamp(30px,5vw,44px); margin:0 0 6px; letter-spacing:-.01em; }
+  h1 span{ color:var(--accent); }
+  .sub{ color:var(--muted); margin:0 0 28px; }
+  #q{ width:100%; padding:14px 18px; font:inherit; border:1px solid var(--line);
+      border-radius:12px; background:var(--card); outline:none; margin-bottom:26px;
+      box-shadow:0 8px 24px -18px rgba(60,45,20,.4); }
+  #q:focus{ border-color:var(--teal); }
+  /* Responsive tile grid of guides */
+  #list{ display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:20px; }
+  a.guide{ display:flex; flex-direction:column; text-decoration:none; color:inherit;
+      background:var(--card); border:1px solid var(--line); border-radius:14px; overflow:hidden;
+      box-shadow:0 8px 24px -18px rgba(60,45,20,.35); transition:.12s; }
+  a.guide:hover{ transform:translateY(-3px); border-color:var(--teal);
+      box-shadow:0 16px 32px -18px rgba(60,45,20,.45); }
+  /* Cover image (or a coloured placeholder when a guide has no thumbnail yet) */
+  a.guide .thumb{ display:block; width:100%; aspect-ratio:16/10; object-fit:cover;
+      background:#efe7d6; border-bottom:1px solid var(--line); }
+  a.guide .ph{ display:grid; place-items:center; width:100%; aspect-ratio:16/10;
+      border-bottom:1px solid var(--line); color:#fff; font-size:40px; font-weight:700;
+      background:linear-gradient(135deg, var(--teal), #134e43); }
+  a.guide .body{ padding:14px 16px 16px; display:flex; flex-direction:column; gap:4px; flex:1; }
+  a.guide h2{ margin:0; font-size:17px; font-weight:700; line-height:1.25; }
+  a.guide p{ margin:0; color:var(--muted); font-size:13.5px; }
+  a.guide .meta{ font-size:12px; color:var(--muted); margin-top:auto; padding-top:6px; }
+  a.guide .snip{ font-size:12.5px; color:var(--muted); font-style:italic; }
+  a.guide .snip mark{ background:#f3dca6; color:var(--ink); border-radius:3px; padding:0 2px; font-style:normal; }
+  /* Per-tile "copy link" button (sits over the cover, doesn't trigger the tile link) */
+  .card{ position:relative; display:flex; }
+  .card a.guide{ width:100%; }
+  .copylink{ position:absolute; top:10px; right:10px; z-index:2; border:0; cursor:pointer;
+    background:rgba(33,29,23,.72); color:#fff; font:600 12px inherit;
+    padding:6px 11px; border-radius:999px; opacity:0; transition:opacity .12s, background .12s; }
+  .card:hover .copylink, .copylink:focus{ opacity:1; }
+  .copylink:hover{ background:var(--teal); }
+  @media (hover: none){ .copylink{ opacity:1; } }
+  /* "Most popular" row */
+  #popular, #featured{ margin-bottom:30px; }
+  #popular h3, #featured h3{ font-size:12.5px; letter-spacing:.07em; text-transform:uppercase;
+    color:var(--muted); margin:0 0 12px; }
+  .poprow{ display:flex; gap:14px; overflow-x:auto; padding-bottom:6px; }
+  a.popcard{ flex:0 0 auto; width:210px; text-decoration:none; color:inherit;
+    background:var(--card); border:1px solid var(--line); border-radius:12px; padding:13px 15px;
+    box-shadow:0 8px 24px -18px rgba(60,45,20,.35); transition:.12s; display:flex; flex-direction:column; gap:5px; }
+  a.popcard:hover{ transform:translateY(-2px); border-color:var(--teal); }
+  a.popcard .rank{ font-size:12px; color:var(--accent); font-weight:700; }
+  a.popcard b{ font-size:14px; line-height:1.25; }
+  a.popcard .v{ font-size:12px; color:var(--muted); margin-top:auto; }
+  /* per-tile view count */
+  a.guide .views{ color:var(--teal); font-weight:600; }
+  .none{ grid-column:1/-1; color:var(--muted); text-align:center; padding:40px 0; }
+  /* header + settings gear */
+  .hdr{ display:flex; align-items:flex-start; gap:12px; }
+  .hdr .grow{ flex:1; min-width:0; }
+  #gear{ flex:none; width:42px; height:42px; border:1px solid var(--line); background:var(--card);
+    color:var(--ink); border-radius:11px; font-size:19px; cursor:pointer; transition:.12s; }
+  #gear:hover{ border-color:var(--teal); transform:rotate(30deg); }
+  .menu{ position:fixed; right:18px; top:70px; z-index:60; width:258px; background:var(--card);
+    border:1px solid var(--line); border-radius:13px; padding:12px 15px;
+    box-shadow:0 18px 44px -18px rgba(60,45,20,.55); }
+  .menu.hidden{ display:none; }
+  .menu h4{ margin:6px 0 6px; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  .menu label{ display:flex; align-items:center; gap:9px; font-size:13.5px; padding:6px 0; cursor:pointer; }
+  .menu label input{ width:16px; height:16px; accent-color:var(--teal); }
+  .menu select{ width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px;
+    background:var(--paper); color:var(--ink); font:inherit; }
+  .menu hr{ border:0; border-top:1px solid var(--line); margin:11px 0; }
+  .menu .admin{ display:block; text-align:center; padding:10px; border-radius:9px; background:var(--ink);
+    color:var(--paper); text-decoration:none; font-weight:700; font-size:13.5px; }
+  .menu .admin:hover{ background:var(--teal); }
+  .menu .reset{ display:block; text-align:center; margin-top:9px; font-size:12px; color:var(--muted); }
+  /* bigger text: scale the guide content (not the header/gear) */
+  body.bigtext #q{ font-size:18px; }
+  body.bigtext #featured, body.bigtext #popular, body.bigtext #list{ zoom:1.13; }
+  /* dark mode */
+  body.dark{ --paper:#1b1813; --card:#26221b; --ink:#efe7d7; --muted:#a89e89; --line:#3b352b;
+    background-image:radial-gradient(rgba(255,240,200,.05) 1px, transparent 1px); }
+  body.dark a.guide .ph{ background:linear-gradient(135deg,#13534676,#0d3a3176); }
+  body.dark a.guide .snip mark{ background:#5a4a1f; color:#f3e9cf; }
+  /* group (collection) view: a back link shown only when ?group= is active */
+  #grouphdr{ display:inline-block; margin:0 0 14px; padding:6px 13px; border:1px solid var(--line);
+    border-radius:999px; background:var(--card); color:var(--ink); text-decoration:none;
+    font:600 13.5px inherit; }
+  #grouphdr:hover{ border-color:var(--teal); }
+  #grouphdr.ghide{ display:none; }
+</style>
+</head>
+<body>
+<main>
+  <a id="grouphdr" class="ghide" href="./">← All guides</a>
+  <div class="hdr">
+    <div class="grow">
+      <h1>How-to <span>Guides</span></h1>
+      <p class="sub">Step-by-step instructions with screenshots. Pick a guide or search below.</p>
+    </div>
+    <button id="gear" title="Settings &amp; admin" aria-label="Settings and admin">⚙</button>
+  </div>
+  <input id="q" type="search" placeholder="Search guides…" autofocus>
+  <div id="featured"></div>
+  <div id="popular"></div>
+  <div id="list"><p class="none">Loading…</p></div>
+</main>
+
+<div id="settings" class="menu hidden">
+  <h4>Display</h4>
+  <label><input type="checkbox" id="setDark"> 🌙 Dark mode</label>
+  <label><input type="checkbox" id="setBig"> 🔠 Bigger text</label>
+  <label><input type="checkbox" id="setNewtab"> ↗ Open guides in a new tab</label>
+  <h4>Sort guides</h4>
+  <select id="setSort">
+    <option value="default">Featured / set order</option>
+    <option value="newest">Newest first</option>
+    <option value="views">Most viewed</option>
+    <option value="az">A–Z</option>
+  </select>
+  <hr>
+  <a class="admin" id="adminLink" href="admin.html" target="_blank" rel="noopener">🔐 Admin</a>
+  <a class="admin" style="margin-top:8px;background:var(--teal)" href="tutorial.html" target="_blank" rel="noopener">🎓 How to make guides</a>
+  <a class="reset" href="#" id="setReset">Reset settings</a>
+</div>
+<script>
+// Optional view-counter endpoint (your Google Apps Script web-app URL).
+// Leave "" to disable counts + the popular row. See analytics/README.md.
+const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
+
+let guides = [];
+let featuredFiles = [];
+let groupMode = false; // true when viewing a single collection (?group=…)
+const GROUP = (new URLSearchParams(location.search).get("group") || "").trim();
+const list = document.getElementById("list");
+const popular = document.getElementById("popular");
+const featured = document.getElementById("featured");
+const q = document.getElementById("q");
+
+// Load the guide index, the optional layout (order.json), and the optional
+// collections (collections.json) together.
+Promise.all([
+  fetch("guides.json?v=" + Date.now()).then(r => r.json()),
+  fetch("order.json?v=" + Date.now()).then(r => r.ok ? r.json() : null).catch(() => null),
+  fetch("collections.json?v=" + Date.now()).then(r => r.ok ? r.json() : null).catch(() => null),
+]).then(([g, order, collections]) => {
+  featuredFiles = (order && order.featured) || [];
+  guides = applyOrder(g, order && order.order);
+  applyGroup(collections); // narrows `guides` to one collection when ?group= is set
+  show(guides);
+  loadCounts().then(counts => {
+    if (!counts || !Object.keys(counts).length) return;
+    guides.forEach(x => x.views = counts[x.file] || 0);
+    if (!q.value.trim()) show(guides);
+  });
+}).catch(() => list.innerHTML =
+  '<p class="none">No guide index yet — it appears automatically about a minute after the first guide is uploaded.</p>');
+
+// When the page is opened as ?group=<id>, show only that collection's guides
+// (in the collection's own order) with the group's name as the header. The
+// guides are unchanged and still live normally on the full homepage.
+function applyGroup(collections) {
+  if (!GROUP) return;
+  const all = (collections && collections.collections) || [];
+  const c = all.find(x => x && x.id === GROUP);
+  const back = document.getElementById("grouphdr");
+  back.classList.remove("ghide"); // show the "← All guides" link
+  if (!c) {
+    document.querySelector(".sub").textContent =
+      "That group link wasn’t found — showing all guides instead.";
+    return;
+  }
+  groupMode = true;
+  const rank = {}; (c.guides || []).forEach((f, i) => (rank[f] = i));
+  const inGroup = new Set(c.guides || []);
+  guides = guides.filter(x => inGroup.has(x.file))
+                 .sort((a, b) => (a.file in rank ? rank[a.file] : 1e9) - (b.file in rank ? rank[b.file] : 1e9));
+  document.title = c.title + " — Guides";
+  const h1 = document.querySelector(".hdr h1"); h1.textContent = c.title;
+  const n = guides.length;
+  document.querySelector(".sub").textContent =
+    c.desc || (n + " guide" + (n === 1 ? "" : "s") + " in this collection.");
+}
+
+// Apply the admin's custom order (order.json); guides not listed keep their
+// default (newest-first) position after the ordered ones.
+function applyOrder(items, order) {
+  if (!order || !order.length) return items;
+  const rank = {}; order.forEach((f, i) => (rank[f] = i));
+  return items.slice().sort((a, b) => {
+    const ia = a.file in rank ? rank[a.file] : Infinity;
+    const ib = b.file in rank ? rank[b.file] : Infinity;
+    return ia - ib;
+  });
+}
+
+// Read counts via JSONP (a <script> tag isn't subject to CORS, which Apps Script
+// responses don't set). Resolves to {} on any error or after a short timeout.
+function loadCounts() {
+  return new Promise((resolve) => {
+    if (!COUNTER_URL || COUNTER_URL.indexOf("http") !== 0) return resolve({});
+    const cbName = "__ssCounts" + Math.floor(Date.now());
+    const s = document.createElement("script");
+    const t = setTimeout(() => { cleanup(); resolve({}); }, 4500);
+    function cleanup() { delete window[cbName]; s.remove(); clearTimeout(t); }
+    window[cbName] = (data) => { cleanup(); resolve((data && data.counts) || {}); };
+    s.onerror = () => { cleanup(); resolve({}); };
+    s.src = COUNTER_URL + (COUNTER_URL.indexOf("?") < 0 ? "?" : "&") +
+            "action=counts&callback=" + cbName;
+    document.body.appendChild(s);
+  });
+}
+
+// The "⭐ Featured" row: guides the admin pinned in order.json (only when not searching).
+function renderFeatured(term) {
+  featured.innerHTML = "";
+  if (groupMode) return; // a collection view is already focused — skip the global rows
+  if (term || !featuredFiles.length) return;
+  const byFile = {}; guides.forEach(g => (byFile[g.file] = g));
+  const picks = featuredFiles.map(f => byFile[f]).filter(Boolean);
+  if (!picks.length) return;
+  const h = document.createElement("h3"); h.textContent = "⭐ Featured";
+  const row = document.createElement("div"); row.className = "poprow";
+  picks.forEach(g => {
+    const a = document.createElement("a");
+    a.className = "popcard"; a.href = g.file; tgt(a);
+    const b = document.createElement("b"); b.textContent = g.title;
+    const v = document.createElement("div"); v.className = "v";
+    v.textContent = g.desc ? g.desc : (g.views ? "👁 " + g.views : "");
+    a.append(b, v); row.append(a);
+  });
+  featured.append(h, row);
+}
+
+// The "🔥 Most popular" row: top guides by views (only when not searching).
+function renderPopular(term) {
+  popular.innerHTML = "";
+  if (groupMode) return; // collection view stays focused on just its guides
+  if (term) return;
+  const top = guides.filter(g => (g.views || 0) > 0)
+                    .sort((a, b) => b.views - a.views).slice(0, 5);
+  if (top.length < 2) return; // not worth a row until a couple have views
+  const h = document.createElement("h3"); h.textContent = "🔥 Most popular";
+  const row = document.createElement("div"); row.className = "poprow";
+  top.forEach((g, i) => {
+    const a = document.createElement("a");
+    a.className = "popcard"; a.href = g.file; tgt(a);
+    const r = document.createElement("div"); r.className = "rank"; r.textContent = "#" + (i + 1);
+    const b = document.createElement("b"); b.textContent = g.title;
+    const v = document.createElement("div"); v.className = "v";
+    v.textContent = "👁 " + g.views + (g.views === 1 ? " view" : " views");
+    a.append(r, b, v); row.append(a);
+  });
+  popular.append(h, row);
+}
+
+function show(items, term) {
+  renderFeatured(term);
+  renderPopular(term);
+  if (!items.length) { list.innerHTML = '<p class="none">No guides match that search.</p>'; return; }
+  list.innerHTML = "";
+  for (const g of sortForDisplay(items)) {
+    const card = document.createElement("div");
+    card.className = "card";
+    const a = document.createElement("a");
+    a.className = "guide";
+    a.href = g.file;
+    tgt(a);
+
+    // Cover: a thumbnail if the guide has one, otherwise a placeholder showing
+    // the title's first letter.
+    if (g.thumb) {
+      const im = document.createElement("img");
+      im.className = "thumb"; im.loading = "lazy"; im.alt = "";
+      im.src = g.thumb;
+      a.append(im);
+    } else {
+      const ph = document.createElement("div");
+      ph.className = "ph";
+      ph.textContent = (g.title || "?").trim().charAt(0).toUpperCase();
+      a.append(ph);
+    }
+
+    const body = document.createElement("div");
+    body.className = "body";
+    const h = document.createElement("h2"); h.textContent = g.title;
+    body.append(h);
+    if (g.desc) { const p = document.createElement("p"); p.textContent = g.desc; body.append(p); }
+
+    // If the match came from inside the guide's steps, show that snippet.
+    if (term && g.text) {
+      const i = g.text.toLowerCase().indexOf(term);
+      const inTitle = (g.title + " " + (g.desc || "")).toLowerCase().includes(term);
+      if (i > -1 && !inTitle) {
+        const start = Math.max(0, i - 55);
+        const snip = document.createElement("p");
+        snip.className = "snip";
+        const before = (start ? "…" : "") + g.text.slice(start, i);
+        const hit = g.text.slice(i, i + term.length);
+        const after = g.text.slice(i + term.length, i + term.length + 70) + "…";
+        snip.append(before);
+        const b = document.createElement("mark"); b.textContent = hit;
+        snip.append(b, after);
+        body.append(snip);
+      }
+    }
+
+    const m = document.createElement("div"); m.className = "meta";
+    if (g.views) {
+      const vc = document.createElement("span"); vc.className = "views";
+      vc.textContent = "👁 " + g.views;
+      m.append(vc, document.createTextNode(" · "));
+    }
+    m.append(document.createTextNode(
+      (g.author ? "by " + g.author + " · " : "") +
+      (g.steps ? g.steps + " steps · " : "") +
+      (g.updated ? "updated " + new Date(g.updated).toLocaleDateString() : "")));
+    body.append(m);
+    a.append(body);
+    card.append(a);
+
+    // "Copy link" — copies the guide's real shareable URL (works even when this
+    // page is embedded in a Google Site, where the address bar shows Google's URL).
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "copylink";
+    copy.textContent = "🔗 Copy link";
+    copy.title = "Copy this guide's shareable link";
+    copy.onclick = (e) => { e.preventDefault(); e.stopPropagation(); copyGuideLink(g, copy); };
+    card.append(copy);
+
+    list.append(card);
+  }
+}
+
+// Resolve a guide's filename to its absolute github.io URL and copy it.
+async function copyGuideLink(g, btn) {
+  const url = new URL(g.file, location.href).href;
+  const label = btn.textContent;
+  if (await copyText(url)) {
+    btn.textContent = "✓ Copied!";
+    setTimeout(() => (btn.textContent = label), 1600);
+  } else {
+    // Modal-free fallback (works in any embed): reveal the link, pre-selected.
+    const inp = document.createElement("input");
+    inp.className = "copylink";
+    inp.readOnly = true;
+    inp.value = url;
+    inp.style.width = "190px";
+    inp.style.opacity = "1";
+    inp.title = "Press Ctrl/Cmd-C to copy";
+    btn.replaceWith(inp);
+    inp.focus();
+    inp.select();
+  }
+}
+
+// Clipboard with a fallback for restrictive embeds (Google Sites iframe).
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) { /* fall through to the legacy method */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "-1000px";
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch (e) { return false; }
+}
+
+function currentView() {
+  const t = q.value.trim().toLowerCase();
+  show(!t ? guides : guides.filter(g =>
+    (g.title + " " + (g.desc || "") + " " + g.file + " " + (g.text || ""))
+      .toLowerCase().includes(t)), t);
+}
+q.oninput = currentView;
+
+/* ===== per-visitor settings (saved in this browser) ===== */
+const PREFS = (() => {
+  const def = { theme: "light", bigtext: false, newtab: false, sort: "default" };
+  try { return Object.assign(def, JSON.parse(localStorage.getItem("ssPrefs") || "{}")); }
+  catch (e) { return def; }
+})();
+function savePrefs() { try { localStorage.setItem("ssPrefs", JSON.stringify(PREFS)); } catch (e) {} }
+function tgt(a) { if (PREFS.newtab) { a.target = "_blank"; a.rel = "noopener"; } return a; }
+function sortForDisplay(items) {
+  const a = items.slice();
+  if (PREFS.sort === "newest") a.sort((x, y) => (y.updated || "").localeCompare(x.updated || ""));
+  else if (PREFS.sort === "views") a.sort((x, y) => (y.views || 0) - (x.views || 0));
+  else if (PREFS.sort === "az") a.sort((x, y) => (x.title || "").localeCompare(y.title || ""));
+  return a; // "default" keeps the order.json / newest-first order
+}
+function applyPrefs(rerender) {
+  document.body.classList.toggle("dark", PREFS.theme === "dark");
+  document.body.classList.toggle("bigtext", !!PREFS.bigtext);
+  if (rerender && guides.length) currentView();
+}
+
+// wire the gear menu
+const gear = document.getElementById("gear");
+const menu = document.getElementById("settings");
+gear.onclick = (e) => { e.stopPropagation(); menu.classList.toggle("hidden"); };
+document.addEventListener("click", (e) => {
+  if (!menu.classList.contains("hidden") && !menu.contains(e.target) && e.target !== gear) menu.classList.add("hidden");
+});
+document.getElementById("setDark").checked = PREFS.theme === "dark";
+document.getElementById("setBig").checked = !!PREFS.bigtext;
+document.getElementById("setNewtab").checked = !!PREFS.newtab;
+document.getElementById("setSort").value = PREFS.sort;
+document.getElementById("setDark").onchange = (e) => { PREFS.theme = e.target.checked ? "dark" : "light"; savePrefs(); applyPrefs(false); };
+document.getElementById("setBig").onchange = (e) => { PREFS.bigtext = e.target.checked; savePrefs(); applyPrefs(false); };
+document.getElementById("setNewtab").onchange = (e) => { PREFS.newtab = e.target.checked; savePrefs(); applyPrefs(true); };
+document.getElementById("setSort").onchange = (e) => { PREFS.sort = e.target.value; savePrefs(); applyPrefs(true); };
+document.getElementById("setReset").onclick = (e) => {
+  e.preventDefault();
+  Object.assign(PREFS, { theme: "light", bigtext: false, newtab: false, sort: "default" });
+  savePrefs();
+  document.getElementById("setDark").checked = false;
+  document.getElementById("setBig").checked = false;
+  document.getElementById("setNewtab").checked = false;
+  document.getElementById("setSort").value = "default";
+  applyPrefs(true);
+};
+applyPrefs(false); // apply theme/text on first load (grid re-renders when data arrives)
+</script>
+</body>
+</html>
