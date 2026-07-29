@@ -74,6 +74,18 @@
   .note{ font-size:12.5px; color:var(--muted); }
   .health-issue{ color:var(--accent); } .health-ok{ color:var(--teal); }
   .saved{ font-size:12px; color:var(--muted); margin-left:8px; }
+  /* busy / success feedback on action buttons (see the busy() helper) */
+  @keyframes ss-spin{ to{ transform:rotate(360deg); } }
+  @keyframes ss-pop{ 0%{ transform:scale(.92); } 60%{ transform:scale(1.05); } 100%{ transform:scale(1); } }
+  .btn .spin{ display:inline-block; width:11px; height:11px; margin-right:6px; vertical-align:-1px;
+    border:2px solid currentColor; border-right-color:transparent; border-radius:50%;
+    animation:ss-spin .7s linear infinite; }
+  .btn.busy{ cursor:progress; }
+  .btn.done{ background:var(--teal); border-color:var(--teal); color:#fff; animation:ss-pop .28s ease-out; }
+  .btn:disabled{ opacity:.55; cursor:not-allowed; }
+  .btn.busy:disabled, .btn.done:disabled{ opacity:1; }
+  /* the status line gets a soft highlight while something is in flight */
+  .saved.working{ color:var(--teal); font-weight:700; }
 
   /* ===== web editor ===== */
   #editor{ max-width:820px; margin:0 auto; padding:28px 22px 90px; }
@@ -342,7 +354,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-07-28a"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-07-28b"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -363,6 +375,44 @@ const enc = new TextEncoder(), dec = new TextDecoder();
 function status(t){ $("status").textContent = t || ""; if(t) setTimeout(()=>{ if($("status").textContent===t) $("status").textContent=""; }, 4000); }
 function splitRepo(r){ const i=r.indexOf("/"); return [r.slice(0,i), r.slice(i+1)]; }
 function siteUrl(file){ const [o,r]=splitRepo(REPO); return `https://${o}.github.io/${r}/${ghPath(file)}`; }
+
+/* ===== busy / done feedback on the slow buttons (save, publish) =====
+   Publishing a screenshot-heavy guide takes seconds, and with no feedback it
+   looked like nothing happened — so people clicked again and published twice.
+   busy() shows a spinner while the work runs, hard-disables the button so a
+   second click can't fire, flashes a green ✓ when it lands, and takes a global
+   lock so you can't start a different action mid-flight.
+   The action should return false (not throw) when it bails out for a reason the
+   user already saw — an empty title, a cancelled confirm — so we don't flash a
+   success it didn't earn. */
+let busyLock = false;
+async function busy(btn, workingLabel, doneLabel, fn){
+  if(!btn || busyLock) return;                 // double-click, or another action already running
+  busyLock = true;
+  const original = btn.innerHTML;
+  // lock the neighbouring actions too (e.g. ← Back while a publish is in flight)
+  const nearby = btn.parentElement ? [...btn.parentElement.querySelectorAll("button")] : [];
+  const toRestore = nearby.filter(b=>b!==btn && !b.disabled);
+  toRestore.forEach(b=>b.disabled=true);
+  btn.disabled = true; btn.classList.add("busy");
+  btn.innerHTML = '<span class="spin"></span>'+workingLabel;
+  const done = ()=>{ busyLock=false; toRestore.forEach(b=>b.disabled=false); };
+  try{
+    const r = await fn();
+    btn.classList.remove("busy");
+    if(r === false){ btn.innerHTML = original; btn.disabled = false; done(); return r; }
+    btn.classList.add("done");
+    btn.innerHTML = "✓ "+doneLabel;
+    // keep it disabled through the confirmation so the ✓ can't be re-clicked
+    setTimeout(()=>{ btn.classList.remove("done"); btn.innerHTML = original; btn.disabled = false; }, 1700);
+    done();
+    return r;
+  }catch(e){
+    btn.classList.remove("busy"); btn.innerHTML = original; btn.disabled = false;
+    done();
+    throw e;
+  }
+}
 
 /* ===== password crypto (AES-GCM key derived from password via PBKDF2) ===== */
 async function deriveKey(password, salt){
@@ -607,12 +657,12 @@ async function toggleUnlisted(g){
 }
 
 /* save the homepage order + featured set into order.json */
-$("saveLayout").onclick = ()=>act(async()=>{
+$("saveLayout").onclick = ()=>busy($("saveLayout"), "Saving…", "Saved", ()=>act(async()=>{
   status("Saving layout…");
   const payload={ order:GUIDES.map(g=>g.file), featured:GUIDES.filter(g=>g.featured).map(g=>g.file) };
   await ghPut("order.json", JSON.stringify(payload,null,1), orderSha, "Update homepage order/featured");
   status("Layout saved ✓");
-});
+}));
 
 /* ===== Collections: group guides + a shareable ?group= link ===== */
 function collSlug(t){ return ((t||"group").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,""))||"group"; }
@@ -629,7 +679,8 @@ function renderCollections(){
       COLLECTIONS.push({ id:uniqueCollId(collSlug(title)), title:title.trim(), desc:"", guides:[] });
       renderCollections();
     }),
-    mkBtn("💾 Save collections", ()=>act(saveCollections))
+    mkBtn("💾 Save collections", (b)=>busy(b, "Saving…", "Saved", saveCollections)
+      .catch(e=>{ console.error(e); status(""); alert("Couldn't save collections.\n\n"+e.message); }))
   );
   host.append(bar);
 
@@ -684,7 +735,12 @@ async function saveCollections(){
   const live=new Set(GUIDES.map(g=>g.file));
   const clean=COLLECTIONS.map(c=>({ id:c.id, title:(c.title||"").trim()||c.id, desc:(c.desc||"").trim(),
     guides:(c.guides||[]).filter(f=>live.has(f)) }));
-  await ghPut("collections.json", JSON.stringify({ collections:clean },null,1), collectionsSha, "Update collections");
+  const r=await ghPut("collections.json", JSON.stringify({ collections:clean },null,1), collectionsSha, "Update collections");
+  // Keep the sha current: writing changes it, and a stale one makes the NEXT
+  // save fail with "409 … does not match". (We don't reload the whole admin
+  // here, so nothing else would refresh it.)
+  collectionsSha = (r && r.content && r.content.sha) || collectionsSha;
+  COLLECTIONS = clean;
   status("Collections saved ✓");
 }
 
@@ -731,7 +787,8 @@ const calloutIcon = { tip:"💡", alert:"⚠️", warning:"🔔" };
 function edSlug(t){ return ((t||"guide").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,""))||"guide"; }
 function edUid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function edBlank(type,title){ return { id:edUid(), type, title, desc:"", img:null, hx:.5, hy:.5, hr:.045, showHl:false, blurs:[], targets:[] }; }
-function edStatus(t){ $("edStatus").textContent=t||""; }
+// Any status ending in "…" is work-in-progress, so it gets the working style.
+function edStatus(t){ const el=$("edStatus"); el.textContent=t||""; el.classList.toggle("working", /…$/.test(t||"")); }
 
 /* --- undo (last edits) --- */
 let edUndoStack = []; // snapshots of ED.steps, newest last (max 30)
@@ -1861,8 +1918,10 @@ async function edOpen(pathOrFile, isDraft){
 }
 
 async function edPublish(){
-  if(!ED) return;
-  if(!ED.title.trim()){ alert("Give the guide a title first."); $("edTitle").focus(); return; }
+  // `return false` = bailed out for a reason the user already saw, so busy()
+  // restores the button instead of flashing a success it didn't earn.
+  if(!ED) return false;
+  if(!ED.title.trim()){ alert("Give the guide a title first."); $("edTitle").focus(); return false; }
   const title=ED.title, draftPath=ED.draftPath;
   edStatus("Building…");
   try{
@@ -1873,11 +1932,11 @@ async function edPublish(){
     if(existing && draftPath){
       const mm=existing.text.match(/stepsnap-author" content="([^"]*)"/);
       const who=mm&&mm[1]?` (made by ${mm[1]})`:"";
-      if(!confirm(`A live guide “${fileName}”${who} already exists.\n\nReplace it with this version?`)){ edStatus(""); return; }
+      if(!confirm(`A live guide “${fileName}”${who} already exists.\n\nReplace it with this version?`)){ edStatus(""); return false; }
     }
     edStatus("Publishing…");
     await ghPut(fileName, html, existing?existing.sha:null, "Publish "+fileName);
-  }catch(e){ console.error(e); edStatus(""); alert("Couldn't publish.\n\n"+e.message); return; }
+  }catch(e){ console.error(e); edStatus(""); alert("Couldn't publish.\n\n"+e.message); return false; }
   // The guide is LIVE from here on. Clearing the draft is only cleanup, so a
   // failure here must never be reported as "couldn't publish" (it used to be,
   // which made a successful publish look broken).
@@ -2015,13 +2074,14 @@ $("edBack").onclick=()=>{
   showApp();
 };
 $("edUndoBtn").onclick=undo;
-$("edPublish").onclick=edPublish;
+$("edPublish").onclick=()=>busy($("edPublish"), "Publishing…", "Published", edPublish)
+  .catch(e=>{ console.error(e); alert("Couldn't publish.\n\n"+e.message); });
 
 /* --- 💾 Save draft: persist the current edits to drafts/ WITHOUT publishing.
    Reopen later from 📥 Drafts to keep editing; publishing still posts it live. --- */
-$("edSaveBtn").onclick=async()=>{
-  if(!ED) return;
-  if(!ED.title.trim()){ alert("Give the guide a title first."); $("edTitle").focus(); return; }
+$("edSaveBtn").onclick=()=>busy($("edSaveBtn"), "Saving…", "Saved", async()=>{
+  if(!ED) return false;
+  if(!ED.title.trim()){ alert("Give the guide a title first."); $("edTitle").focus(); return false; }
   edStatus("Saving draft…");
   try{
     const { html, fileName }=await edBuildExport();
@@ -2031,8 +2091,8 @@ $("edSaveBtn").onclick=async()=>{
     ED.draftPath=path; ED.file=fileName; // it's now a reopenable draft
     edDirty=false;
     edStatus("Draft saved ✓ — safe to leave; reopen from 📥 Drafts");
-  }catch(e){ console.error(e); edStatus(""); alert("Couldn't save the draft.\n\n"+e.message); }
-};
+  }catch(e){ console.error(e); edStatus(""); alert("Couldn't save the draft.\n\n"+e.message); return false; }
+});
 $("edAddStep").onclick=()=>{ if(!ED) return; snap(); ED.steps.push(edBlank("note","New step")); edRender(); window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"}); };
 $("edAddChapter").onclick=()=>{ if(!ED) return; snap(); ED.steps.push(edBlank("chapter","New chapter")); edRender(); window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"}); };
 
