@@ -1,0 +1,14 @@
+{
+ "collections": [
+  {
+   "id": "gmail-migration-guides",
+   "title": "Gmail Migration Guides",
+   "desc": "",
+   "guides": [
+    "how-to-clean-up-your-gmail.html",
+    "filter-schoology-messages-in-gmail.html",
+    "change-schoology-notifications-settings.html"
+   ]
+  }
+ ]
+}
