@@ -3,6 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Keep the guide site out of search results. It stays fully reachable by
+     link (that's how sharing works) — it just won't be discoverable by
+     strangers searching the web. NOTE: a robots.txt would NOT work here, since
+     this is a project page (…github.io/guides/) and robots.txt is only honored
+     at the domain root; a Disallow would also stop crawlers from ever reading
+     this tag, which is what actually removes a page from results. -->
+<meta name="robots" content="noindex, nofollow">
 <title>Guides</title>
 <style>
   :root{ --paper:#f7f2e9; --card:#fffdf8; --ink:#211d17; --muted:#7c7466;
