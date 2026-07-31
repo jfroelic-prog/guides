@@ -56,6 +56,20 @@
   .card:hover .copylink, .copylink:focus{ opacity:1; }
   .copylink:hover{ background:var(--teal); }
   @media (hover: none){ .copylink{ opacity:1; } }
+  /* clickable collection chips — jump to a group without needing its link */
+  #collections{ margin:0 0 26px; display:none; }
+  #collections.show{ display:block; }
+  #collections h3{ font-size:12.5px; letter-spacing:.07em; text-transform:uppercase;
+    color:var(--muted); margin:0 0 10px; }
+  .chiprow{ display:flex; flex-wrap:wrap; gap:9px; }
+  a.chip{ text-decoration:none; color:inherit; background:var(--card); border:1px solid var(--line);
+    border-radius:999px; padding:8px 15px; font:600 13.5px inherit; display:inline-flex;
+    align-items:center; gap:7px; transition:.12s; }
+  a.chip:hover{ border-color:var(--teal); transform:translateY(-1px); }
+  a.chip .n{ font-weight:400; color:var(--muted); font-size:12px; }
+  a.chip.on{ background:var(--teal); border-color:var(--teal); color:#fff; }
+  a.chip.on .n{ color:rgba(255,255,255,.8); }
+  body.dark a.chip{ background:#2a2621; }
   /* "Most popular" row */
   #popular, #featured{ margin-bottom:30px; }
   #popular h3, #featured h3{ font-size:12.5px; letter-spacing:.07em; text-transform:uppercase;
@@ -118,6 +132,7 @@
     <button id="gear" title="Settings &amp; admin" aria-label="Settings and admin">⚙</button>
   </div>
   <input id="q" type="search" placeholder="Search guides…" autofocus>
+  <div id="collections"></div>
   <div id="featured"></div>
   <div id="popular"></div>
   <div id="list"><p class="none">Loading…</p></div>
@@ -163,6 +178,7 @@ Promise.all([
 ]).then(([g, order, collections]) => {
   featuredFiles = (order && order.featured) || [];
   guides = applyOrder(g, order && order.order);
+  renderCollections(collections, g); // clickable chips (counts come from ALL guides)
   applyGroup(collections); // narrows `guides` to one collection when ?group= is set
   show(guides);
   loadCounts().then(counts => {
@@ -172,6 +188,45 @@ Promise.all([
   });
 }).catch(() => list.innerHTML =
   '<p class="none">No guide index yet — it appears automatically about a minute after the first guide is uploaded.</p>');
+
+// Collections as clickable chips, so you can browse a group without needing its
+// link. Each chip just points at ?group=<id> — the same URL you'd share — so the
+// group view and the shared link stay one code path. The chip for the group
+// you're currently viewing is highlighted, and "All guides" takes you back.
+// Nothing renders when collections.json is absent or empty.
+function renderCollections(collections, allGuides) {
+  const host = document.getElementById("collections");
+  const list = (collections && collections.collections) || [];
+  const live = new Set((allGuides || []).map(g => g.file));
+  // only offer groups that still have at least one guide on the site
+  const usable = list.filter(c => (c.guides || []).some(f => live.has(f)));
+  if (!usable.length) return;
+
+  const h = document.createElement("h3");
+  h.textContent = "🏷️ Collections";
+  const row = document.createElement("div");
+  row.className = "chiprow";
+
+  if (GROUP) { // already inside a group — offer the way back first
+    const all = document.createElement("a");
+    all.className = "chip"; all.href = "./"; all.textContent = "← All guides";
+    row.append(all);
+  }
+  usable.forEach(c => {
+    const a = document.createElement("a");
+    a.className = "chip" + (c.id === GROUP ? " on" : "");
+    a.href = "?group=" + encodeURIComponent(c.id);
+    a.title = c.desc || c.title;
+    a.append(document.createTextNode(c.title));
+    const n = document.createElement("span");
+    n.className = "n";
+    n.textContent = (c.guides || []).filter(f => live.has(f)).length;
+    a.append(n);
+    row.append(a);
+  });
+  host.append(h, row);
+  host.classList.add("show");
+}
 
 // When the page is opened as ?group=<id>, show only that collection's guides
 // (in the collection's own order) with the group's name as the header. The
