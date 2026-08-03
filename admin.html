@@ -425,15 +425,19 @@
     <div id="vidDoneBox" class="hidden">
       <h3>✅ Video ready</h3>
       <p class="note" id="vidDoneNote"></p>
+      <div class="vrow"><label>Paste its link</label>
+        <input type="text" id="vidPasteLink" placeholder="https://youtu.be/… or a Drive link" style="flex:1;font-size:12px"></div>
+      <p class="note">Upload the downloaded file to YouTube (set it <b>Unlisted</b>) or Drive,
+        then paste the link here. The guide page gets a <b>▶ Watch as video</b> button, and you
+        get a permanent share link that survives re-uploads.</p>
       <div class="vrow" id="vidLinkRow" style="display:none">
-        <label>Share link</label>
-        <input type="text" id="vidLink" readonly style="flex:1;font-size:12px">
-      </div>
+        <label>Permanent link</label>
+        <input type="text" id="vidLink" readonly style="flex:1;font-size:12px"></div>
       <div class="vfoot">
         <span class="sp"></span>
         <button class="btn tiny" id="vidCopyLink" style="display:none">🔗 Copy link</button>
         <button class="btn tiny" id="vidDoneClose">Close</button>
-        <button class="btn primary tiny" id="vidUpload">⬆ Publish video</button>
+        <button class="btn primary tiny" id="vidSaveLink">🔗 Link this video</button>
       </div>
     </div>
   </div>
@@ -442,7 +446,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-08-03d"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-08-03e"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -2313,10 +2317,9 @@ async function vidStart(){
     vidRunning=false;
     $("vidRun").classList.add("hidden"); $("vidDoneBox").classList.remove("hidden");
     $("vidLinkRow").style.display="none"; $("vidCopyLink").style.display="none";
-    $("vidUpload").style.display="";
+    $("vidSaveLink").style.display=""; $("vidPasteLink").value="";
     $("vidDoneNote").textContent=
-      `${(out.blob.size/1048576).toFixed(1)} MB downloaded to your computer. `+
-      `Publish it to put it in your Drive and add a ▶ Watch as video button to the guide.`;
+      `${(out.blob.size/1048576).toFixed(1)} MB downloaded to your computer.`;
   }catch(e){
     console.error(e); vidRunning=false;
     alert("Couldn't make the video.\n\n"+(e.message||e));
@@ -2329,37 +2332,33 @@ $("vidCancelBtn").onclick=vidClose;
 $("vidStop").onclick=()=>{ vidCancel=true; };
 $("vidDoneClose").onclick=vidClose;
 $("vidCopyLink").onclick=(e)=>copyBtn(e.currentTarget, $("vidLink").value);
-$("vidUpload").onclick=async()=>{
-  const btn=$("vidUpload"); btn.disabled=true;
-  $("vidDoneBox").classList.add("hidden"); $("vidRun").classList.remove("hidden");
-  $("vidRunTitle").textContent="⬆ Publishing to Drive…"; vidCancel=false; vidRunning=true;
-  const setS=(t,frac)=>{ $("vidStatus").textContent=t||"";
-    if(typeof frac==="number") $("vidBar").style.width=Math.min(100,frac*100)+"%"; };
+// The permanent share link: watch.html looks the video up live, so re-uploading
+// a new version never breaks a link someone already has.
+function watchUrl(guideFile){ return siteUrl("watch.html")+"?g="+encodeURIComponent(guideFile); }
+async function videoSetLink(guideFile, link){
+  const r=await vidApi({ action:"videoset", guide:guideFile, link });
+  if(r.link===undefined) throw new Error("The script didn't confirm the link — is analytics/Code.gs up to date?");
+  return r;
+}
+$("vidSaveLink").onclick=async()=>{
+  const btn=$("vidSaveLink"), link=$("vidPasteLink").value.trim();
+  if(!link){ alert("Paste the video's link first (from YouTube, Drive, wherever you uploaded it)."); return; }
+  if(link.indexOf("https://")!==0){ alert("That doesn't look like a link — it should start with https://"); return; }
+  const guide=(ED&&ED.file)||(edSlug((ED&&ED.title)||"guide")+".html");
+  btn.disabled=true; const old=btn.textContent; btn.textContent="Saving…";
   try{
-    const link=await vidPublish(setS);
-    vidRunning=false;
-    $("vidRun").classList.add("hidden"); $("vidDoneBox").classList.remove("hidden");
-    $("vidDoneNote").textContent="Published ✓ — the guide page now shows a ▶ Watch as video button.";
-    $("vidLink").value=link||""; $("vidLinkRow").style.display=link?"":"none";
-    $("vidCopyLink").style.display=link?"":"none"; $("vidUpload").style.display="none";
+    await videoSetLink(guide, link);
+    const w=watchUrl(guide);
+    $("vidLink").value=w; $("vidLinkRow").style.display="";
+    $("vidCopyLink").style.display=""; btn.style.display="none";
+    $("vidDoneNote").textContent="Linked ✓ — the guide page now shows ▶ Watch as video. "+
+      "Share the permanent link below; it keeps working even if you re-upload the video later.";
   }catch(e){
-    console.error(e); vidRunning=false;
-    $("vidRun").classList.add("hidden"); $("vidDoneBox").classList.remove("hidden");
-    // "Authorization is required" means the script IS up to date but was never
-    // granted Drive access — a different fix from "you haven't redeployed".
-    const needsDrive=/authoriz/i.test(e.message||"");
-    alert("Couldn't publish the video.\n\n"+(e.message||e)+"\n\n"+(needsDrive
-      ? "Your script is up to date — it just hasn't been given permission to use "
-        + "Google Drive yet.\n\nIn the Apps Script editor:\n"
-        + "1. Add this function at the bottom, then Save:\n\n"
-        + "     function authorizeDrive(){ DriveApp.getRootFolder().getName(); }\n\n"
-        + "2. Choose authorizeDrive in the function dropdown and press ▶ Run.\n"
-        + "3. Approve the prompt — Google Drive will be listed this time.\n"
-        + "4. Deploy → Manage deployments → edit → New version → Deploy."
-      : "Video hosting needs the newest analytics/Code.gs in your Apps Script "
-        + "(Deploy → Manage deployments → edit → New version).")
-      +"\n\nThe video is already downloaded to your computer either way.");
-  }finally{ btn.disabled=false; }
+    console.error(e);
+    alert("Couldn't save the link.\n\n"+(e.message||e)
+      +"\n\nThis needs the newest analytics/Code.gs in your Apps Script "
+      +"(Deploy → Manage deployments → edit → New version).");
+  }finally{ btn.disabled=false; btn.textContent=old; }
 };
 $("vidPace").oninput=vidLabels; $("vidPad").oninput=vidLabels;
 $("vidNarr").onchange=vidVoiceVis;
