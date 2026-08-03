@@ -442,7 +442,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-08-03c"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-08-03d"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -2345,10 +2345,20 @@ $("vidUpload").onclick=async()=>{
   }catch(e){
     console.error(e); vidRunning=false;
     $("vidRun").classList.add("hidden"); $("vidDoneBox").classList.remove("hidden");
-    alert("Couldn't publish the video.\n\n"+(e.message||e)
-      +"\n\nVideo hosting needs the newest analytics/Code.gs in your Apps Script "
-      +"(Deploy → Manage deployments → edit → New version). The video is already "
-      +"downloaded to your computer either way.");
+    // "Authorization is required" means the script IS up to date but was never
+    // granted Drive access — a different fix from "you haven't redeployed".
+    const needsDrive=/authoriz/i.test(e.message||"");
+    alert("Couldn't publish the video.\n\n"+(e.message||e)+"\n\n"+(needsDrive
+      ? "Your script is up to date — it just hasn't been given permission to use "
+        + "Google Drive yet.\n\nIn the Apps Script editor:\n"
+        + "1. Add this function at the bottom, then Save:\n\n"
+        + "     function authorizeDrive(){ DriveApp.getRootFolder().getName(); }\n\n"
+        + "2. Choose authorizeDrive in the function dropdown and press ▶ Run.\n"
+        + "3. Approve the prompt — Google Drive will be listed this time.\n"
+        + "4. Deploy → Manage deployments → edit → New version → Deploy."
+      : "Video hosting needs the newest analytics/Code.gs in your Apps Script "
+        + "(Deploy → Manage deployments → edit → New version).")
+      +"\n\nThe video is already downloaded to your computer either way.");
   }finally{ btn.disabled=false; }
 };
 $("vidPace").oninput=vidLabels; $("vidPad").oninput=vidLabels;
