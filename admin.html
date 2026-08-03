@@ -381,9 +381,20 @@
       <p class="note" id="vidScope"></p>
       <div class="vrow"><label>Narration</label>
         <select id="vidNarr">
-          <option value="recordings">My recorded voice-overs</option>
+          <option value="recordings">My recorded voice-overs only</option>
+          <option value="tts-fill">Recordings + Google voice for the rest</option>
+          <option value="tts-all">Google voice for every step</option>
           <option value="silent">No sound</option>
         </select></div>
+      <div class="vrow" id="vidVoiceRow"><label>Narrator voice</label>
+        <select id="vidVoice">
+          <option value="en">English (US)</option>
+          <option value="en-GB">English (UK)</option>
+          <option value="en-AU">English (AU)</option>
+          <option value="en-IN">English (India)</option>
+          <option value="es">Spanish</option>
+        </select>
+        <button class="btn tiny" id="vidPrevBtn" type="button">🔊 Preview</button></div>
       <div class="vrow"><label>Time per silent step</label>
         <input type="range" id="vidPace" min="2" max="8" step="0.5"><span class="vval" id="vidPaceV"></span></div>
       <div class="vrow"><label>Pause after narration</label>
@@ -417,7 +428,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-08-03a"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-08-03b"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -1891,13 +1902,15 @@ const VID_FONT='"Century Gothic",CenturyGothic,"URW Gothic","Avant Garde",Futura
 let vidCancel=false, vidRunning=false;
 
 function vidPrefs(){
-  const def={ narration:"recordings", pace:3.5, pad:0.6, res:720, quality:"standard",
-              captions:true, capDesc:false, motion:true, fade:true, cards:true };
+  const def={ narration:"recordings", voice:"en", pace:3.5, pad:0.6, res:720,
+              quality:"standard", captions:true, capDesc:false, motion:true,
+              fade:true, cards:true };
   try{ return Object.assign(def, JSON.parse(localStorage.getItem(VID_LS)||"{}")); }
   catch(e){ return def; }
 }
 function vidCollect(){
-  const p={ narration:$("vidNarr").value, pace:+$("vidPace").value, pad:+$("vidPad").value,
+  const p={ narration:$("vidNarr").value, voice:$("vidVoice").value,
+    pace:+$("vidPace").value, pad:+$("vidPad").value,
     res:+$("vidRes").value, quality:$("vidQ").value, captions:$("vidCap").checked,
     capDesc:$("vidCapD").checked, motion:$("vidZoom").checked, fade:$("vidFade").checked,
     cards:$("vidCards").checked };
@@ -1906,12 +1919,15 @@ function vidCollect(){
 }
 function vidPopulate(){
   const p=vidPrefs();
-  $("vidNarr").value=p.narration; $("vidPace").value=p.pace; $("vidPad").value=p.pad;
+  $("vidNarr").value=p.narration; $("vidVoice").value=p.voice||"en";
+  $("vidPace").value=p.pace; $("vidPad").value=p.pad;
   $("vidRes").value=String(p.res); $("vidQ").value=p.quality;
   $("vidCap").checked=p.captions; $("vidCapD").checked=p.capDesc;
   $("vidZoom").checked=p.motion; $("vidFade").checked=p.fade; $("vidCards").checked=p.cards;
-  vidLabels();
+  vidLabels(); vidVoiceVis();
 }
+// The voice row only matters when a Google-voice mode is picked.
+function vidVoiceVis(){ $("vidVoiceRow").style.display=/^tts/.test($("vidNarr").value)?"":"none"; }
 function vidLabels(){
   $("vidPaceV").textContent=(+$("vidPace").value).toFixed(1)+"s";
   $("vidPadV").textContent=(+$("vidPad").value).toFixed(1)+"s";
@@ -1937,6 +1953,64 @@ async function vidDecodeAudio(actx, dataUrl){
   return await actx.decodeAudioData(buf);
 }
 
+/* --- Google-voice narration, served by the site's Apps Script (action=tts).
+       The script fetches Google's translate voice server-side and returns MP3
+       as base64 — so the admin needs no keys, no capture prompt, and nothing
+       plays aloud during preparation. Unofficial endpoint; if it ever breaks,
+       recorded voice-overs and silent mode are unaffected. --- */
+const vidTtsCache=new Map(); // "voice|text" → AudioBuffer (reused across renders)
+function vidNarrText(s){
+  const t=((s.title||"")+". "+(s.desc||""))
+    .replace(/https?:\/\/\S+/g,"")     // don't read URLs aloud
+    .replace(/\s+/g," ").trim().replace(/^\.\s*/,"");
+  return t.length>1 ? t.slice(0,600) : "";
+}
+// The voice endpoint takes ~190 chars per request — split on sentences, pack ≤180.
+function vidTtsChunks(text){
+  const parts=[]; let cur="";
+  for(let s of text.split(/(?<=[.!?…])\s+/)){
+    while(s.length>180){
+      let cut=s.lastIndexOf(" ",180); if(cut<40) cut=180;
+      if(cur){ parts.push(cur); cur=""; }
+      parts.push(s.slice(0,cut)); s=s.slice(cut).trim();
+    }
+    if(!s) continue;
+    if((cur+" "+s).trim().length<=180) cur=(cur?cur+" ":"")+s;
+    else{ if(cur) parts.push(cur); cur=s; }
+  }
+  if(cur) parts.push(cur);
+  return parts;
+}
+function vidConcatBuffers(actx,bufs){
+  if(bufs.length===1) return bufs[0];
+  const len=bufs.reduce((a,b)=>a+b.length,0);
+  const out=actx.createBuffer(1,len,bufs[0].sampleRate);
+  const d=out.getChannelData(0); let off=0;
+  for(const b of bufs){ d.set(b.getChannelData(0),off); off+=b.length; }
+  return out;
+}
+async function vidTtsBuffer(actx,text,tl){
+  const key=tl+"|"+text;
+  if(vidTtsCache.has(key)) return vidTtsCache.get(key);
+  const base=window.VID_TTS_URL||COUNTER_URL; // VID_TTS_URL = test hook
+  if(!base||base.indexOf("http")!==0)
+    throw new Error("The Google-voice narrator needs the site's Apps Script (the same one that powers the view counter), and none is configured.");
+  const bufs=[];
+  for(const chunk of vidTtsChunks(text)){
+    const r=await fetch(base+(base.indexOf("?")<0?"?":"&")+"action=tts&tl="
+      +encodeURIComponent(tl)+"&text="+encodeURIComponent(chunk),{cache:"no-store"});
+    if(!r.ok) throw new Error("Narrator service error ("+r.status+").");
+    const j=await r.json();
+    if(!j.audio) throw new Error("Narrator: "+(j.error||"no audio")
+      +" — the Apps Script may need the newest Code.gs (redeploy it once, same URL).");
+    const bin=Uint8Array.from(atob(j.audio),c=>c.charCodeAt(0));
+    bufs.push(await actx.decodeAudioData(bin.buffer));
+  }
+  const buf=vidConcatBuffers(actx,bufs);
+  vidTtsCache.set(key,buf);
+  return buf;
+}
+
 // Build the timeline: one slide per step (annotations baked via flatten),
 // chapters + intro/outro as title cards, callouts as colored note cards.
 async function vidPrepare(opts, actx, onStatus){
@@ -1952,9 +2026,16 @@ async function vidPrepare(opts, actx, onStatus){
     const isC=!!calloutIcon[s.type];
     let img=null; try{ if(s.img) img=await loadImage(await flatten(s)); }catch(e){ console.warn("flatten failed",e); }
     let audio=null;
-    if(opts.narration!=="silent" && s.audio){
-      try{ audio=await vidDecodeAudio(actx, s.audio); }
-      catch(e){ console.warn("voice-over decode failed",e); }
+    if(opts.narration!=="silent"){
+      if(s.audio && opts.narration!=="tts-all"){
+        try{ audio=await vidDecodeAudio(actx, s.audio); }
+        catch(e){ console.warn("voice-over decode failed",e); }
+      }
+      if(!audio && (opts.narration==="tts-fill"||opts.narration==="tts-all")){
+        const text=vidNarrText(s);
+        if(text){ onStatus(`Creating narration ${done}/${steps.length}…`);
+          audio=await vidTtsBuffer(actx, text, opts.voice||"en"); }
+      }
     }
     const label = isC ? null : (s.type==="nav" ? "→" : String(++n));
     const base = audio ? audio.duration+opts.pad : ((img&&!isC) ? opts.pace : vidReadingSecs(s));
@@ -2147,6 +2228,23 @@ $("vidGo").onclick=vidStart;
 $("vidCancelBtn").onclick=vidClose;
 $("vidStop").onclick=()=>{ vidCancel=true; };
 $("vidPace").oninput=vidLabels; $("vidPad").oninput=vidLabels;
+$("vidNarr").onchange=vidVoiceVis;
+$("vidPrevBtn").onclick=async()=>{
+  const b=$("vidPrevBtn"), old=b.textContent;
+  b.disabled=true; b.textContent="…";
+  const actx=new (window.AudioContext||window.webkitAudioContext)();
+  try{
+    const buf=await vidTtsBuffer(actx,"Here is how your guide will sound.",$("vidVoice").value);
+    const src=actx.createBufferSource(); src.buffer=buf; src.connect(actx.destination);
+    await actx.resume(); src.start();
+    await new Promise(r=>{ src.onended=r; setTimeout(r, buf.duration*1000+600); });
+  }catch(e){
+    alert("Couldn't fetch the narrator voice.\n\n"+(e.message||e)
+      +"\n\nThe narrator uses the site's Apps Script (the view-counter one). If you "
+      +"haven't yet, paste the newest analytics/Code.gs into it and redeploy "
+      +"(Manage deployments → edit → New version — the URL stays the same).");
+  }finally{ try{ actx.close(); }catch(_){ } b.disabled=false; b.textContent=old; }
+};
 $("vidOv").addEventListener("click",e=>{ if(e.target===$("vidOv") && !vidRunning) vidClose(); });
 
 /* --- copy the whole guide to the clipboard (paste into Gmail/Docs/Word) --- */
@@ -2379,7 +2477,7 @@ const HELP_EDITOR=[
   ["➕ Add GIF as step","(bottom bar) add the animation as a new step, keeping the selected ones"],
   ["🗑 Delete selected","(bottom bar) delete every selected step at once"],
   ["🎞 animation speed","on ANY GIF step, a slider re-times it anytime — bigger = slower (up to 6s per frame); older GIFs are re-read automatically on first change"],
-  ["🎬 Make video","turn the guide into one narrated video — recorded voice-overs play over their steps; pace, captions and size are adjustable; downloads as a video file"],
+  ["🎬 Make video","turn the guide into one narrated video — your recordings play over their steps, and a Google voice can read the rest (or everything) aloud; pace, voice, captions and size are adjustable; downloads as a video file"],
   ["💾 Save draft","save your progress without publishing — reopen it later from 📥 Drafts"],
   ["📋 Copy guide","copy everything, formatted — paste into Gmail / Docs / Word"],
   ["⬇ Markdown","download the guide as a text file with images"],
