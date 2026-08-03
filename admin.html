@@ -173,6 +173,27 @@
   #helpBody{ overflow:auto; padding:10px 18px 16px; }
   .hrow{ display:flex; gap:12px; padding:7px 0; border-bottom:1px dashed #efe9db; font-size:13.5px; }
   .hrow:last-child{ border-bottom:0; }
+
+  /* 🎬 video export dialog */
+  #vidOv{ position:fixed; inset:0; z-index:85; background:rgba(33,29,23,.45);
+    display:flex; align-items:flex-start; justify-content:center; padding:6vh 16px; }
+  #vidOv.hidden{ display:none; }
+  .vidcard{ background:var(--card); border:1px solid var(--line); border-radius:16px;
+    box-shadow:0 18px 50px -20px rgba(0,0,0,.5); max-width:520px; width:100%; padding:18px 20px; }
+  .vidcard h3{ margin:0 0 4px; font-size:17px; }
+  .vrow{ display:flex; align-items:center; gap:10px; margin:9px 0; font-size:13.5px; }
+  .vrow label{ flex:0 0 150px; color:var(--muted); font-size:12.5px; }
+  .vrow input[type=range]{ flex:1; padding:0; }
+  .vrow select{ width:auto; padding:6px 8px; font-size:13px; }
+  .vrow .vval{ width:46px; text-align:right; font-size:12.5px; color:var(--muted); }
+  .vchecks{ display:grid; grid-template-columns:1fr 1fr; gap:4px 14px; margin:10px 0; }
+  .vchecks label{ display:flex; gap:7px; align-items:center; font-size:13px; }
+  .vchecks input{ width:auto; }
+  .vfoot{ display:flex; gap:8px; align-items:center; margin-top:14px; }
+  .vfoot .sp{ flex:1; }
+  #vidRun .track{ height:10px; background:#efe9db; border-radius:999px; overflow:hidden; margin:12px 0 8px; }
+  #vidBar{ height:100%; width:0%; background:var(--teal); transition:width .2s linear; }
+  #vidStatus{ font-size:13px; color:var(--muted); min-height:18px; }
   .hrow b{ flex:none; width:120px; font-weight:700; }
   .hrow span{ color:#5c5346; }
   .hgroup{ margin:12px 0 2px; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
@@ -309,6 +330,7 @@
     <button class="btn tiny" id="edUndoBtn" title="Undo the last edit (Cmd/Ctrl+Z)">↩ Undo</button>
     <button class="btn tiny" id="edCopyBtn" title="Copy the whole guide — paste into Gmail, Google Docs, or Word">📋 Copy guide</button>
     <button class="btn tiny" id="edMdBtn" title="Download the guide as a Markdown file">⬇ Markdown</button>
+    <button class="btn tiny" id="edVideoBtn" title="Turn the guide into a narrated video — voice-overs play over each step">🎬 Make video</button>
     <button class="btn tiny" id="helpEdBtn" title="What does every button do?">❓</button>
     <button class="btn tiny" id="edSaveBtn" title="Save your progress as a draft — doesn't publish; reopen later from 📥 Drafts">💾 Save draft</button>
     <button class="btn primary tiny" id="edPublish">🚀 Publish</button>
@@ -351,10 +373,51 @@
   </div>
 </div>
 
+<!-- ============ 🎬 VIDEO EXPORT ============ -->
+<div id="vidOv" class="hidden">
+  <div class="vidcard">
+    <div id="vidSetup">
+      <h3>🎬 Make a video of this guide</h3>
+      <p class="note" id="vidScope"></p>
+      <div class="vrow"><label>Narration</label>
+        <select id="vidNarr">
+          <option value="recordings">My recorded voice-overs</option>
+          <option value="silent">No sound</option>
+        </select></div>
+      <div class="vrow"><label>Time per silent step</label>
+        <input type="range" id="vidPace" min="2" max="8" step="0.5"><span class="vval" id="vidPaceV"></span></div>
+      <div class="vrow"><label>Pause after narration</label>
+        <input type="range" id="vidPad" min="0" max="2" step="0.1"><span class="vval" id="vidPadV"></span></div>
+      <div class="vrow"><label>Size</label>
+        <select id="vidRes"><option value="720">720p (recommended)</option><option value="1080">1080p</option></select>
+        <select id="vidQ"><option value="standard">Standard quality</option><option value="high">High quality</option></select></div>
+      <div class="vchecks">
+        <label><input type="checkbox" id="vidCap"> Show step captions</label>
+        <label><input type="checkbox" id="vidCapD"> …include description</label>
+        <label><input type="checkbox" id="vidZoom"> Zoom toward the click</label>
+        <label><input type="checkbox" id="vidFade"> Fade between steps</label>
+        <label><input type="checkbox" id="vidCards"> Intro &amp; outro cards</label>
+      </div>
+      <p class="note">Rendering happens in real time — a 40-second video takes about 40 seconds.
+        <b>Keep this tab visible</b> while it runs.</p>
+      <div class="vfoot"><span class="sp"></span>
+        <button class="btn tiny" id="vidCancelBtn">Cancel</button>
+        <button class="btn primary tiny" id="vidGo">🎬 Render video</button></div>
+    </div>
+    <div id="vidRun" class="hidden">
+      <h3>🎬 Rendering…</h3>
+      <div class="track"><div id="vidBar"></div></div>
+      <div id="vidStatus"></div>
+      <div class="vfoot"><span class="sp"></span>
+        <button class="btn tiny" id="vidStop">✕ Cancel render</button></div>
+    </div>
+  </div>
+</div>
+
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-07-28c"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-08-03a"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -1816,6 +1879,276 @@ function edDownload(name,mime,content){
   setTimeout(()=>URL.revokeObjectURL(a.href),5000);
 }
 
+/* ===== 🎬 video export: stitch the steps + voice-overs into one video =====
+   Editor-only, like the GIF maker — draws each step onto a hidden canvas,
+   plays its recorded voice-over into the mix, and records the result with
+   MediaRecorder. Downloads a .webm (or .mp4 where Chrome can record it).
+   edBuildExport is untouched, so builder parity is unaffected.
+   Rendering is REAL-TIME (a 40s video takes ~40s) and the tab must stay
+   visible — Chrome freezes canvas drawing in background tabs. */
+const VID_LS="stepsnapVideo";
+const VID_FONT='"Century Gothic",CenturyGothic,"URW Gothic","Avant Garde",Futura,"Trebuchet MS",sans-serif';
+let vidCancel=false, vidRunning=false;
+
+function vidPrefs(){
+  const def={ narration:"recordings", pace:3.5, pad:0.6, res:720, quality:"standard",
+              captions:true, capDesc:false, motion:true, fade:true, cards:true };
+  try{ return Object.assign(def, JSON.parse(localStorage.getItem(VID_LS)||"{}")); }
+  catch(e){ return def; }
+}
+function vidCollect(){
+  const p={ narration:$("vidNarr").value, pace:+$("vidPace").value, pad:+$("vidPad").value,
+    res:+$("vidRes").value, quality:$("vidQ").value, captions:$("vidCap").checked,
+    capDesc:$("vidCapD").checked, motion:$("vidZoom").checked, fade:$("vidFade").checked,
+    cards:$("vidCards").checked };
+  try{ localStorage.setItem(VID_LS, JSON.stringify(p)); }catch(e){}
+  return p;
+}
+function vidPopulate(){
+  const p=vidPrefs();
+  $("vidNarr").value=p.narration; $("vidPace").value=p.pace; $("vidPad").value=p.pad;
+  $("vidRes").value=String(p.res); $("vidQ").value=p.quality;
+  $("vidCap").checked=p.captions; $("vidCapD").checked=p.capDesc;
+  $("vidZoom").checked=p.motion; $("vidFade").checked=p.fade; $("vidCards").checked=p.cards;
+  vidLabels();
+}
+function vidLabels(){
+  $("vidPaceV").textContent=(+$("vidPace").value).toFixed(1)+"s";
+  $("vidPadV").textContent=(+$("vidPad").value).toFixed(1)+"s";
+}
+function vidOpen(){
+  if(!ED||!ED.steps.length){ alert("Open a guide with steps first."); return; }
+  vidPopulate();
+  const n=gifSelected.size, voiced=(gifSelected.size?ED.steps.filter(s=>gifSelected.has(s.id)):ED.steps).filter(s=>s.audio).length;
+  $("vidScope").textContent=(n?`Using the ${n} selected step${n===1?"":"s"}`:`Using all ${ED.steps.length} step${ED.steps.length===1?"":"s"}`)
+    + (voiced?` · ${voiced} ha${voiced===1?"s":"ve"} a voice-over`:" · no voice-overs recorded yet");
+  $("vidSetup").classList.remove("hidden"); $("vidRun").classList.add("hidden");
+  $("vidOv").classList.remove("hidden");
+}
+function vidClose(){ if(vidRunning) vidCancel=true; $("vidOv").classList.add("hidden"); }
+
+// Roughly how long a text-only card should stay up: reading speed, clamped.
+function vidReadingSecs(s){
+  const words=((s.title||"")+" "+(s.desc||"")).trim().split(/\s+/).filter(Boolean).length;
+  return Math.min(8, Math.max(2.6, words/2.6));
+}
+async function vidDecodeAudio(actx, dataUrl){
+  const buf=await (await fetch(dataUrl)).arrayBuffer();
+  return await actx.decodeAudioData(buf);
+}
+
+// Build the timeline: one slide per step (annotations baked via flatten),
+// chapters + intro/outro as title cards, callouts as colored note cards.
+async function vidPrepare(opts, actx, onStatus){
+  const steps = gifSelected.size ? ED.steps.filter(s=>gifSelected.has(s.id)) : ED.steps.slice();
+  const slides=[];
+  if(opts.cards) slides.push({ kind:"card", title:ED.title||"Untitled guide", sub:ED.desc||"",
+    foot:ED.author?("Made by "+ED.author):"", dur:2.6 });
+  let n=0, done=0;
+  for(const s of steps){
+    onStatus(`Preparing step ${++done}/${steps.length}…`);
+    if(s.type==="chapter"){ n=0; slides.push({ kind:"card", chapter:true, title:s.title||"Chapter",
+      sub:s.desc||"", foot:"", dur:2.4 }); continue; }
+    const isC=!!calloutIcon[s.type];
+    let img=null; try{ if(s.img) img=await loadImage(await flatten(s)); }catch(e){ console.warn("flatten failed",e); }
+    let audio=null;
+    if(opts.narration!=="silent" && s.audio){
+      try{ audio=await vidDecodeAudio(actx, s.audio); }
+      catch(e){ console.warn("voice-over decode failed",e); }
+    }
+    const label = isC ? null : (s.type==="nav" ? "→" : String(++n));
+    const base = audio ? audio.duration+opts.pad : ((img&&!isC) ? opts.pace : vidReadingSecs(s));
+    slides.push({ kind: img?"shot":"note", img, s, label,
+      icon: isC?calloutIcon[s.type]:null, audio, dur: Math.max(1.4, base) });
+  }
+  if(opts.cards) slides.push({ kind:"card", title:"Made with StepSnap", sub:"", foot:"", dur:1.6 });
+  let t=0; slides.forEach(sl=>{ sl.t0=t; t+=sl.dur; });
+  return { slides, total:t };
+}
+
+function vidWrap(x, text, maxW, maxLines){
+  const words=(text||"").split(/\s+/).filter(Boolean); const lines=[]; let line="", cut=false;
+  for(const w of words){
+    const t=line?line+" "+w:w;
+    if(x.measureText(t).width<=maxW) line=t;
+    else{ if(line) lines.push(line); line=w;
+      if(lines.length>=maxLines){ cut=true; break; } }
+  }
+  if(line && lines.length<maxLines) lines.push(line);
+  if(cut && lines.length) lines[lines.length-1]+="…";
+  return lines;
+}
+function vidRRect(x,px,py,pw,ph,r){ if(x.roundRect){ x.beginPath(); x.roundRect(px,py,pw,ph,r); } else { x.beginPath(); x.rect(px,py,pw,ph); } }
+
+// Draw one slide at progress p (0..1 through its duration).
+function vidDrawSlide(x, W, H, sl, p, opts){
+  x.fillStyle="#faf7f0"; x.fillRect(0,0,W,H);
+  if(sl.kind==="card"){
+    x.textAlign="center"; x.textBaseline="middle";
+    if(sl.chapter){ x.fillStyle="#c9a94d"; x.font=`700 ${Math.round(H*0.03)}px ${VID_FONT}`;
+      x.fillText("CHAPTER", W/2, H*0.3); }
+    x.fillStyle="#211d17"; x.font=`700 ${Math.round(H*0.075)}px ${VID_FONT}`;
+    const lines=vidWrap(x, sl.title, W*0.82, 2);
+    lines.forEach((ln,i)=> x.fillText(ln, W/2, H*0.44+(i-(lines.length-1)/2)*H*0.1));
+    if(sl.sub){ x.fillStyle="#7c7466"; x.font=`${Math.round(H*0.037)}px ${VID_FONT}`;
+      vidWrap(x, sl.sub, W*0.8, 2).forEach((ln,i)=> x.fillText(ln, W/2, H*0.63+i*H*0.052)); }
+    if(sl.foot){ x.fillStyle="#b6ad9b"; x.font=`${Math.round(H*0.03)}px ${VID_FONT}`;
+      x.fillText(sl.foot, W/2, H*0.9); }
+    x.textAlign="left"; x.textBaseline="alphabetic"; return;
+  }
+  if(sl.kind==="note"){
+    const ty=sl.s&&sl.s.type;
+    const tint = ty==="alert"?["#fdeceb","#f1bdb6"]: ty==="warning"?["#fbf4e2","#ecdca6"]:["#eef6f3","#bfe0d6"];
+    const px=W*0.12, py=H*0.16, pw=W*0.76, ph=H*0.68;
+    x.fillStyle=tint[0]; x.strokeStyle=tint[1]; x.lineWidth=4;
+    vidRRect(x,px,py,pw,ph,H*0.03); x.fill(); x.stroke();
+    x.textAlign="center"; x.textBaseline="middle";
+    if(sl.icon){ x.font=`${Math.round(H*0.1)}px ${VID_FONT}`; x.fillText(sl.icon, W/2, py+ph*0.2); }
+    x.fillStyle="#211d17"; x.font=`700 ${Math.round(H*0.05)}px ${VID_FONT}`;
+    vidWrap(x, (sl.s&&sl.s.title)||"", pw*0.86, 2).forEach((ln,i)=> x.fillText(ln, W/2, py+ph*0.42+i*H*0.065));
+    x.fillStyle="#5c5346"; x.font=`${Math.round(H*0.034)}px ${VID_FONT}`;
+    vidWrap(x, (sl.s&&sl.s.desc)||"", pw*0.86, 4).forEach((ln,i)=> x.fillText(ln, W/2, py+ph*0.62+i*H*0.048));
+    x.textAlign="left"; x.textBaseline="alphabetic"; return;
+  }
+  // "shot": the annotated screenshot, optionally slowly zooming toward the click
+  const img=sl.img, iw=img.naturalWidth, ih=img.naturalHeight;
+  let sx=0, sy=0, sw=iw, sh=ih;
+  if(opts.motion){
+    let tx=0.5, ty=0.5;
+    const tg=targetsOf(sl.s||{});
+    const c=tg.find(g=>g.shape==="circle")||tg[0];
+    if(c){ if(c.shape==="box"){ tx=c.x+c.w/2; ty=c.y+c.h/2; }
+      else if(c.shape==="arrow"){ tx=c.x2; ty=c.y2; }
+      else { tx=c.x; ty=c.y; } }
+    const sc=1+0.06*Math.min(1,p);
+    sw=iw/sc; sh=ih/sc;
+    sx=Math.max(0, Math.min(iw-sw, tx*iw - sw*tx));
+    sy=Math.max(0, Math.min(ih-sh, ty*ih - sh*ty));
+  }
+  const capH = opts.captions ? Math.round(H*0.14) : 0;
+  const availW=W*0.94, availH=(H-capH)*0.92;
+  const k=Math.min(availW/sw, availH/sh);
+  const dw=sw*k, dh=sh*k, dx=(W-dw)/2, dy=((H-capH)-dh)/2;
+  x.fillStyle="#ffffff"; x.fillRect(dx-6,dy-6,dw+12,dh+12);
+  x.strokeStyle="#e6decd"; x.lineWidth=2; x.strokeRect(dx-6,dy-6,dw+12,dh+12);
+  x.imageSmoothingEnabled=true; x.imageSmoothingQuality="high";
+  x.drawImage(img, sx,sy,sw,sh, dx,dy,dw,dh);
+  if(opts.captions && sl.s && (sl.s.title||sl.label)){
+    const y0=H-capH;
+    x.fillStyle="rgba(33,29,23,.92)"; x.fillRect(0,y0,W,capH);
+    let cx=W*0.035;
+    if(sl.label){
+      const r=capH*0.3;
+      x.fillStyle="#d23f31"; x.beginPath(); x.arc(cx+r, y0+capH/2, r, 0, Math.PI*2); x.fill();
+      x.fillStyle="#fff"; x.font=`700 ${Math.round(r*1.1)}px ${VID_FONT}`;
+      x.textAlign="center"; x.textBaseline="middle";
+      x.fillText(sl.label, cx+r, y0+capH/2+1);
+      x.textAlign="left"; cx+=r*2+W*0.015;
+    }
+    x.textBaseline="middle";
+    const title=(sl.s.title||"").trim();
+    const desc=opts.capDesc?((sl.s.desc||"").split("\n")[0].trim()):"";
+    x.fillStyle="#fff"; x.font=`700 ${Math.round(capH*(desc?0.28:0.32))}px ${VID_FONT}`;
+    x.fillText(vidWrap(x,title,W*0.93-cx,1)[0]||"", cx, y0+capH*(desc?0.36:0.5));
+    if(desc){ x.fillStyle="rgba(255,255,255,.75)"; x.font=`${Math.round(capH*0.22)}px ${VID_FONT}`;
+      x.fillText(vidWrap(x,desc,W*0.93-cx,1)[0]||"", cx, y0+capH*0.7); }
+    x.textBaseline="alphabetic";
+  }
+}
+
+// Prepare + record + return the finished file. Kept separate from the dialog
+// so it can be exercised directly in tests.
+async function vidRender(opts, onStatus){
+  const actx=new (window.AudioContext||window.webkitAudioContext)();
+  try{
+    const prep=await vidPrepare(opts, actx, onStatus);
+    if(!prep.slides.length) throw new Error("Nothing to render — no steps.");
+    const W=opts.res===1080?1920:1280, H=opts.res===1080?1080:720;
+    const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+    const x=cv.getContext("2d");
+    const dest=actx.createMediaStreamDestination();
+    // A silent constant source keeps the audio track flowing even with no clips.
+    try{ const ks=actx.createConstantSource(); ks.offset.value=0; ks.connect(dest); ks.start(); }catch(e){}
+    await actx.resume();
+    const t0=actx.currentTime+0.3;
+    for(const sl of prep.slides){
+      if(sl.audio){ const src=actx.createBufferSource(); src.buffer=sl.audio;
+        src.connect(dest); src.start(t0+sl.t0+0.2); }
+    }
+    const stream=new MediaStream([ ...cv.captureStream(30).getVideoTracks(),
+                                   ...dest.stream.getAudioTracks() ]);
+    const mime=["video/mp4;codecs=avc1.640028,mp4a.40.2","video/mp4",
+                "video/webm;codecs=vp9,opus","video/webm;codecs=vp8,opus","video/webm"]
+      .find(m=>{ try{ return MediaRecorder.isTypeSupported(m); }catch(e){ return false; } })||"";
+    const bps = opts.quality==="high" ? (opts.res===1080?8e6:5e6) : (opts.res===1080?5e6:2.5e6);
+    const rec=new MediaRecorder(stream, Object.assign(
+      { videoBitsPerSecond:bps, audioBitsPerSecond:128000 }, mime?{mimeType:mime}:{}));
+    const chunks=[]; rec.ondataavailable=e=>{ if(e.data&&e.data.size) chunks.push(e.data); };
+    const stopped=new Promise(res=>{ rec.onstop=res; });
+    const fmt=s=>{ s=Math.max(0,Math.round(s)); return Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); };
+    const fadeS=0.35;
+    let idx=0;
+    rec.start(250);
+    await new Promise(resolve=>{
+      // rAF gives smooth 30fps while the tab is visible. Chrome FREEZES rAF in
+      // hidden tabs, so a low-rate interval keeps the clock advancing (choppy
+      // frames, continuous audio) instead of hanging the render forever.
+      let done=false, iv=0;
+      const finish=()=>{ if(done) return; done=true; clearInterval(iv); resolve(); };
+      const tick=()=>{
+        if(done) return;
+        if(vidCancel) return finish();
+        const t=actx.currentTime-t0;
+        if(t>=prep.total+0.25) return finish();
+        if(t>=0){
+          while(idx<prep.slides.length-1 && t>=prep.slides[idx+1].t0) idx++;
+          const sl=prep.slides[idx], local=t-sl.t0;
+          vidDrawSlide(x,W,H,sl,Math.min(1,local/sl.dur),opts);
+          if(opts.fade && idx>0 && local<fadeS){
+            x.save(); x.globalAlpha=1-local/fadeS;
+            vidDrawSlide(x,W,H,prep.slides[idx-1],1,opts);
+            x.restore();
+          }
+          onStatus(`Rendering… ${fmt(t)} / ${fmt(prep.total)} — keep this tab visible`, t/prep.total);
+        }
+      };
+      iv=setInterval(tick,400);
+      const loop=()=>{ if(done) return; tick(); requestAnimationFrame(loop); };
+      requestAnimationFrame(loop);
+    });
+    rec.stop(); await stopped;
+    const type=(mime||"video/webm").split(";")[0];
+    return { blob:new Blob(chunks,{type}), type,
+             ext:type.indexOf("mp4")>-1?"mp4":"webm", total:prep.total };
+  } finally { try{ actx.close(); }catch(e){} }
+}
+
+async function vidStart(){
+  if(vidRunning) return;
+  const opts=vidCollect();
+  vidRunning=true; vidCancel=false;
+  $("vidSetup").classList.add("hidden"); $("vidRun").classList.remove("hidden");
+  const setS=(t,frac)=>{ $("vidStatus").textContent=t||"";
+    if(typeof frac==="number") $("vidBar").style.width=Math.min(100,frac*100)+"%"; };
+  try{
+    const out=await vidRender(opts, setS);
+    if(vidCancel){ vidRunning=false; vidClose(); return; }
+    edDownload(edSlug(ED.title||"guide")+"-video."+out.ext, out.type, out.blob);
+    setS(`Done ✓ — ${(out.blob.size/1048576).toFixed(1)} MB downloaded`, 1);
+    setTimeout(()=>{ vidRunning=false; vidClose(); }, 1900);
+  }catch(e){
+    console.error(e); vidRunning=false;
+    alert("Couldn't make the video.\n\n"+(e.message||e));
+    vidClose();
+  }
+}
+$("edVideoBtn").onclick=vidOpen;
+$("vidGo").onclick=vidStart;
+$("vidCancelBtn").onclick=vidClose;
+$("vidStop").onclick=()=>{ vidCancel=true; };
+$("vidPace").oninput=vidLabels; $("vidPad").oninput=vidLabels;
+$("vidOv").addEventListener("click",e=>{ if(e.target===$("vidOv") && !vidRunning) vidClose(); });
+
 /* --- copy the whole guide to the clipboard (paste into Gmail/Docs/Word) --- */
 $("edCopyBtn").onclick=async()=>{
   if(!ED) return;
@@ -2046,6 +2379,7 @@ const HELP_EDITOR=[
   ["➕ Add GIF as step","(bottom bar) add the animation as a new step, keeping the selected ones"],
   ["🗑 Delete selected","(bottom bar) delete every selected step at once"],
   ["🎞 animation speed","on ANY GIF step, a slider re-times it anytime — bigger = slower (up to 6s per frame); older GIFs are re-read automatically on first change"],
+  ["🎬 Make video","turn the guide into one narrated video — recorded voice-overs play over their steps; pace, captions and size are adjustable; downloads as a video file"],
   ["💾 Save draft","save your progress without publishing — reopen it later from 📥 Drafts"],
   ["📋 Copy guide","copy everything, formatted — paste into Gmail / Docs / Word"],
   ["⬇ Markdown","download the guide as a text file with images"],
