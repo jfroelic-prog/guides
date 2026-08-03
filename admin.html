@@ -416,11 +416,25 @@
         <button class="btn primary tiny" id="vidGo">🎬 Render video</button></div>
     </div>
     <div id="vidRun" class="hidden">
-      <h3>🎬 Rendering…</h3>
+      <h3 id="vidRunTitle">🎬 Rendering…</h3>
       <div class="track"><div id="vidBar"></div></div>
       <div id="vidStatus"></div>
       <div class="vfoot"><span class="sp"></span>
         <button class="btn tiny" id="vidStop">✕ Cancel render</button></div>
+    </div>
+    <div id="vidDoneBox" class="hidden">
+      <h3>✅ Video ready</h3>
+      <p class="note" id="vidDoneNote"></p>
+      <div class="vrow" id="vidLinkRow" style="display:none">
+        <label>Share link</label>
+        <input type="text" id="vidLink" readonly style="flex:1;font-size:12px">
+      </div>
+      <div class="vfoot">
+        <span class="sp"></span>
+        <button class="btn tiny" id="vidCopyLink" style="display:none">🔗 Copy link</button>
+        <button class="btn tiny" id="vidDoneClose">Close</button>
+        <button class="btn primary tiny" id="vidUpload">⬆ Publish video</button>
+      </div>
     </div>
   </div>
 </div>
@@ -428,7 +442,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-08-03b"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-08-03c"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -1704,6 +1718,35 @@ ${body}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
 <\/script>
 <script>
 (function(){
+  // "▶ Watch as video" — shown only when a video has been published for this
+  // guide. Read over JSONP (Apps Script sends no CORS headers), so publishing a
+  // video never requires re-publishing the guide.
+  var COUNTER=${JSON.stringify(COUNTER_URL)};
+  if(!COUNTER||COUNTER.indexOf("http")!==0||location.protocol==="file:")return;
+  var g=(location.pathname.split("/").pop()||"").toLowerCase();
+  if(!g||g.slice(-5)!==".html")return;
+  var cb="__ssVid"+Math.floor(Math.random()*1e9);
+  window[cb]=function(d){
+    try{
+      var link=d&&d.videos&&d.videos[g];
+      if(link){
+        var a=document.createElement("a");
+        a.className="home"; a.href=link; a.target="_blank"; a.rel="noopener";
+        a.textContent="▶ Watch as video";
+        var at=document.getElementById("pdfBtn");
+        if(at&&at.parentNode) at.parentNode.insertBefore(a,at.nextSibling);
+      }
+    }catch(e){}
+    try{ delete window[cb]; }catch(e){}
+  };
+  var s=document.createElement("script");
+  s.src=COUNTER+(COUNTER.indexOf("?")<0?"?":"&")+"action=videos&callback="+cb;
+  s.onerror=function(){ try{ delete window[cb]; }catch(e){} };
+  document.body.appendChild(s);
+})();
+<\/script>
+<script>
+(function(){
   // Floating chapters: toggle on small screens + highlight the section in view.
   var toc=document.getElementById("toc"); if(!toc) return;
   var btn=document.getElementById("tocToggle");
@@ -1941,7 +1984,8 @@ function vidOpen(){
   $("vidSetup").classList.remove("hidden"); $("vidRun").classList.add("hidden");
   $("vidOv").classList.remove("hidden");
 }
-function vidClose(){ if(vidRunning) vidCancel=true; $("vidOv").classList.add("hidden"); }
+function vidClose(){ if(vidRunning) vidCancel=true;
+  $("vidDoneBox").classList.add("hidden"); $("vidOv").classList.add("hidden"); }
 
 // Roughly how long a text-only card should stay up: reading speed, clamped.
 function vidReadingSecs(s){
@@ -2204,19 +2248,75 @@ async function vidRender(opts, onStatus){
   } finally { try{ actx.close(); }catch(e){} }
 }
 
+/* --- publishing the finished video to Drive, via the site's Apps Script ---
+   The file goes up in 5 MB slices; the script relays each one straight into a
+   Drive resumable-upload session, so nothing huge sits in its memory and the
+   browser never handles Drive credentials. Body is sent as text/plain JSON so
+   the browser treats it as a "simple" request and skips the CORS preflight
+   that Apps Script can't answer. */
+let vidLast=null; // { blob, type, ext } of the most recent render
+function vidApiBase(){ return window.VID_TTS_URL||COUNTER_URL; }
+async function vidApi(body){
+  const base=vidApiBase();
+  if(!base||base.indexOf("http")!==0) throw new Error("No Apps Script is configured for this site.");
+  const r=await fetch(base,{ method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
+    body:JSON.stringify(body) });
+  if(!r.ok) throw new Error("Script returned "+r.status);
+  const j=await r.json();
+  if(j.error) throw new Error(j.error);
+  return j;
+}
+function blobToB64(blob){ return new Promise((res,rej)=>{
+  const fr=new FileReader();
+  fr.onload=()=>res(String(fr.result).split(",")[1]||"");
+  fr.onerror=rej; fr.readAsDataURL(blob);
+}); }
+async function vidPublish(setS){
+  if(!vidLast) throw new Error("Render a video first.");
+  const guide=(ED&&ED.file)||(edSlug((ED&&ED.title)||"guide")+".html");
+  const blob=vidLast.blob;
+  setS("Starting upload…",0);
+  const init=await vidApi({ action:"videoinit", guide, mime:vidLast.type });
+  if(!init.session) throw new Error("The script didn't return an upload session.");
+  const CHUNK=5*1024*1024;                 // multiple of 256 KB, as Drive requires
+  let start=0, fileId="";
+  while(start<blob.size){
+    if(vidCancel) throw new Error("cancelled");
+    const slice=blob.slice(start, Math.min(blob.size, start+CHUNK));
+    const b64=await blobToB64(slice);
+    const r=await vidApi({ action:"videochunk", session:init.session,
+      start, total:blob.size, b64 });
+    start+=slice.size;
+    setS(`Uploading… ${(start/1048576).toFixed(1)} / ${(blob.size/1048576).toFixed(1)} MB`,
+         start/blob.size);
+    if(r.done){ fileId=r.fileId; break; }
+  }
+  if(!fileId) throw new Error("Upload finished without a file id.");
+  setS("Sharing…",1);
+  const done=await vidApi({ action:"videodone", guide, fileId });
+  return done.link;
+}
+
 async function vidStart(){
   if(vidRunning) return;
   const opts=vidCollect();
   vidRunning=true; vidCancel=false;
-  $("vidSetup").classList.add("hidden"); $("vidRun").classList.remove("hidden");
+  $("vidSetup").classList.add("hidden"); $("vidDoneBox").classList.add("hidden");
+  $("vidRun").classList.remove("hidden"); $("vidRunTitle").textContent="🎬 Rendering…";
   const setS=(t,frac)=>{ $("vidStatus").textContent=t||"";
     if(typeof frac==="number") $("vidBar").style.width=Math.min(100,frac*100)+"%"; };
   try{
     const out=await vidRender(opts, setS);
     if(vidCancel){ vidRunning=false; vidClose(); return; }
+    vidLast=out;
     edDownload(edSlug(ED.title||"guide")+"-video."+out.ext, out.type, out.blob);
-    setS(`Done ✓ — ${(out.blob.size/1048576).toFixed(1)} MB downloaded`, 1);
-    setTimeout(()=>{ vidRunning=false; vidClose(); }, 1900);
+    vidRunning=false;
+    $("vidRun").classList.add("hidden"); $("vidDoneBox").classList.remove("hidden");
+    $("vidLinkRow").style.display="none"; $("vidCopyLink").style.display="none";
+    $("vidUpload").style.display="";
+    $("vidDoneNote").textContent=
+      `${(out.blob.size/1048576).toFixed(1)} MB downloaded to your computer. `+
+      `Publish it to put it in your Drive and add a ▶ Watch as video button to the guide.`;
   }catch(e){
     console.error(e); vidRunning=false;
     alert("Couldn't make the video.\n\n"+(e.message||e));
@@ -2227,6 +2327,30 @@ $("edVideoBtn").onclick=vidOpen;
 $("vidGo").onclick=vidStart;
 $("vidCancelBtn").onclick=vidClose;
 $("vidStop").onclick=()=>{ vidCancel=true; };
+$("vidDoneClose").onclick=vidClose;
+$("vidCopyLink").onclick=(e)=>copyBtn(e.currentTarget, $("vidLink").value);
+$("vidUpload").onclick=async()=>{
+  const btn=$("vidUpload"); btn.disabled=true;
+  $("vidDoneBox").classList.add("hidden"); $("vidRun").classList.remove("hidden");
+  $("vidRunTitle").textContent="⬆ Publishing to Drive…"; vidCancel=false; vidRunning=true;
+  const setS=(t,frac)=>{ $("vidStatus").textContent=t||"";
+    if(typeof frac==="number") $("vidBar").style.width=Math.min(100,frac*100)+"%"; };
+  try{
+    const link=await vidPublish(setS);
+    vidRunning=false;
+    $("vidRun").classList.add("hidden"); $("vidDoneBox").classList.remove("hidden");
+    $("vidDoneNote").textContent="Published ✓ — the guide page now shows a ▶ Watch as video button.";
+    $("vidLink").value=link||""; $("vidLinkRow").style.display=link?"":"none";
+    $("vidCopyLink").style.display=link?"":"none"; $("vidUpload").style.display="none";
+  }catch(e){
+    console.error(e); vidRunning=false;
+    $("vidRun").classList.add("hidden"); $("vidDoneBox").classList.remove("hidden");
+    alert("Couldn't publish the video.\n\n"+(e.message||e)
+      +"\n\nVideo hosting needs the newest analytics/Code.gs in your Apps Script "
+      +"(Deploy → Manage deployments → edit → New version). The video is already "
+      +"downloaded to your computer either way.");
+  }finally{ btn.disabled=false; }
+};
 $("vidPace").oninput=vidLabels; $("vidPad").oninput=vidLabels;
 $("vidNarr").onchange=vidVoiceVis;
 $("vidPrevBtn").onclick=async()=>{
