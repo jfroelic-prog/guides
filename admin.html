@@ -442,7 +442,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-08-03f"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-08-03g"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -1945,7 +1945,7 @@ const VID_FONT='"Century Gothic",CenturyGothic,"URW Gothic","Avant Garde",Futura
 let vidCancel=false, vidRunning=false;
 
 function vidPrefs(){
-  const def={ narration:"recordings", voice:"en", pace:3.5, pad:0.6, res:720,
+  const def={ narration:"recordings", voice:"piper:en_US-hfc_female-medium", pace:3.5, pad:0.6, res:720,
               quality:"standard", captions:true, capDesc:false, motion:true,
               fade:true, cards:true };
   try{ return Object.assign(def, JSON.parse(localStorage.getItem(VID_LS)||"{}")); }
@@ -1968,9 +1968,11 @@ function vidPopulate(){
   $("vidCap").checked=p.captions; $("vidCapD").checked=p.capDesc;
   $("vidZoom").checked=p.motion; $("vidFade").checked=p.fade; $("vidCards").checked=p.cards;
   vidLabels(); vidVoiceVis();
-  // Fill the voice list from whatever the script offers, then restore the choice.
-  vidVoiceOptions().then(()=>{
+  // Fill the voice list, then restore the saved choice. Piper's catalogue is
+  // fetched first (fast, ~200ms) so its voices can be validated before listing.
+  piperLoad().catch(()=>{}).then(vidVoiceOptions).then(()=>{
     if(p.voice && [...$("vidVoice").options].some(o=>o.value===p.voice)) $("vidVoice").value=p.voice;
+    vidVoiceHint();
   });
 }
 // The voice row only matters when a Google-voice mode is picked.
@@ -2011,6 +2013,56 @@ async function vidDecodeAudio(actx, dataUrl){
        plays aloud during preparation. Unofficial endpoint; if it ever breaks,
        recorded voice-overs and silent mode are unaffected. --- */
 const vidTtsCache=new Map(); // "voice|text" → AudioBuffer (reused across renders)
+
+/* --- Narrator engines. A voice's id says which one speaks it:
+     "piper:en_US-hfc_female-medium"  → Piper, synthesised in this browser
+     "en-US-Neural2-F"                → Google Cloud (needs a key in Code.gs)
+     "en" / "en-GB"                   → Google's free translate voice
+   Piper is the good free one: no key, no billing, nothing to configure. It
+   downloads a ~25 MB voice model once (cached by the browser afterwards) and
+   runs entirely client-side, so it also can't be blocked by a Workspace policy.
+   The cost is speed — roughly 1.5–3x realtime — so we synthesise each step's
+   narration in ONE call (there's a ~4s fixed overhead per call, so fewer, longer
+   calls win) and cache aggressively.
+   NOTE: this is the project's one CDN dependency, loaded lazily and only when a
+   Piper voice is actually chosen — everything else still works offline. --- */
+const PIPER_CDN="https://cdn.jsdelivr.net/npm/@diffusionstudio/vits-web@1.0.3/+esm";
+const PIPER_VOICES=[  // curated; filtered at runtime against what the library has
+  ["en_US-hfc_female-medium","English (US) — female"],
+  ["en_US-hfc_male-medium",  "English (US) — male"],
+  ["en_US-amy-medium",       "English (US) — female, softer"],
+  ["en_US-ryan-high",        "English (US) — male, higher quality"],
+  ["en_US-lessac-high",      "English (US) — female, higher quality"],
+  ["en_US-joe-medium",       "English (US) — male, casual"],
+  ["en_GB-alba-medium",      "English (UK) — female"],
+  ["en_GB-alan-medium",      "English (UK) — male"],
+  ["en_GB-cori-high",        "English (UK) — female, higher quality"]
+];
+let piperMod=null, piperVoiceKeys=null;
+function isPiper(v){ return String(v||"").indexOf("piper:")===0; }
+async function piperLoad(){
+  if(piperMod) return piperMod;
+  try{ piperMod=await import(PIPER_CDN); }
+  catch(e){ throw new Error("Couldn't load the in-browser voice engine — check the internet connection (it comes from cdn.jsdelivr.net)."); }
+  try{ piperVoiceKeys=new Set((await piperMod.voices()).map(v=>v.key)); }catch(e){ piperVoiceKeys=null; }
+  return piperMod;
+}
+async function piperBuffer(actx, text, voiceId, onStatus){
+  const tts=await piperLoad();
+  const id=voiceId.replace(/^piper:/,"");
+  // Catch a stale/unknown id here — otherwise the library fails deep inside with
+  // an unhelpful "Unexpected end of JSON input".
+  if(piperVoiceKeys && !piperVoiceKeys.has(id))
+    throw new Error(`The voice "${id}" isn't available any more — pick another from the list.`);
+  const have=await tts.stored().catch(()=>[]);
+  if(have.indexOf(id)<0){
+    onStatus && onStatus("Downloading the voice (one time, ~25 MB)…");
+    await tts.download(id,(p)=>{ if(onStatus && p && p.total)
+      onStatus(`Downloading the voice… ${Math.round(p.loaded/p.total*100)}%`); });
+  }
+  const wav=await tts.predict({ text, voiceId:id });
+  return await actx.decodeAudioData(await wav.arrayBuffer());
+}
 // What the site's script can do: the free translate voice (robotic, ~180 chars a
 // request) or Google Cloud Neural2 (natural, 4000 chars). Asked once per page.
 let vidTtsInfo=null;
@@ -2030,16 +2082,33 @@ async function vidTtsCapabilities(){
 async function vidVoiceOptions(){
   const info=await vidTtsCapabilities();
   const sel=$("vidVoice"); const want=sel.value;
-  const list = info.cloud && info.voices.length
-    ? info.voices.map(v=>[v.id, v.label])
-    : [["en","English (US)"],["en-GB","English (UK)"],["en-AU","English (AU)"],
-       ["en-IN","English (India)"],["es","Spanish"]];
   sel.innerHTML="";
-  list.forEach(([v,l])=>{ const o=document.createElement("option"); o.value=v; o.textContent=l; sel.append(o); });
+  const group=(label)=>{ const g=document.createElement("optgroup"); g.label=label; sel.append(g); return g; };
+  const add=(g,v,l)=>{ const o=document.createElement("option"); o.value=v; o.textContent=l; g.append(o); };
+
+  // Piper first: the best free option, and it needs no setup at all.
+  const gp=group("Natural — made in your browser (no setup)");
+  PIPER_VOICES.filter(([id])=>!piperVoiceKeys||piperVoiceKeys.has(id))
+    .forEach(([id,label])=>add(gp,"piper:"+id,label));
+
+  if(info.cloud && info.voices.length){
+    const gc=group("Natural — Google Cloud (key configured)");
+    info.voices.forEach(v=>add(gc,v.id,v.label));
+  }
+  const gb=group("Basic — quick but robotic");
+  [["en","English (US)"],["en-GB","English (UK)"],["en-AU","English (AU)"],
+   ["en-IN","English (India)"],["es","Spanish"]].forEach(([v,l])=>add(gb,v,l));
+
   if([...sel.options].some(o=>o.value===want)) sel.value=want;
-  $("vidVoiceNote").textContent = info.cloud
-    ? "Natural (Google Cloud Neural2)"
-    : "Basic voice — see analytics/Code.gs to enable the natural ones";
+  vidVoiceHint();
+}
+// A one-line honest description of whatever voice is selected.
+function vidVoiceHint(){
+  const v=$("vidVoice").value;
+  $("vidVoiceNote").textContent = isPiper(v)
+    ? "Runs in this browser · free, no setup · downloads a ~25 MB voice once, then slower to generate"
+    : /Neural2/.test(v) ? "Google Cloud Neural2 · fast and natural"
+    : "Free Google voice · instant, but robotic";
 }
 function vidNarrText(s){
   const t=((s.title||"")+". "+(s.desc||""))
@@ -2072,9 +2141,15 @@ function vidConcatBuffers(actx,bufs){
   for(const b of bufs){ d.set(b.getChannelData(0),off); off+=b.length; }
   return out;
 }
-async function vidTtsBuffer(actx,text,tl){
+async function vidTtsBuffer(actx,text,tl,onStatus){
   const key=tl+"|"+text;
   if(vidTtsCache.has(key)) return vidTtsCache.get(key);
+  // Piper runs here in the browser — no script, no key, nothing to configure.
+  if(isPiper(tl)){
+    const buf=await piperBuffer(actx,text,tl,onStatus);
+    vidTtsCache.set(key,buf);
+    return buf;
+  }
   const base=window.VID_TTS_URL||COUNTER_URL; // VID_TTS_URL = test hook
   if(!base||base.indexOf("http")!==0)
     throw new Error("The Google-voice narrator needs the site's Apps Script (the same one that powers the view counter), and none is configured.");
@@ -2119,8 +2194,13 @@ async function vidPrepare(opts, actx, onStatus){
       }
       if(!audio && (opts.narration==="tts-fill"||opts.narration==="tts-all")){
         const text=vidNarrText(s);
-        if(text){ onStatus(`Creating narration ${done}/${steps.length}…`);
-          audio=await vidTtsBuffer(actx, text, opts.voice||"en"); }
+        if(text){
+          const label=`Creating narration ${done}/${steps.length}`;
+          onStatus(label+"…");
+          // Piper is slow enough that its download/synthesis progress matters.
+          audio=await vidTtsBuffer(actx, text, opts.voice||"en",
+            (sub)=>onStatus(`${label} — ${sub}`));
+        }
       }
     }
     const label = isC ? null : (s.type==="nav" ? "→" : String(++n));
@@ -2400,12 +2480,14 @@ $("vidSaveLink").onclick=async()=>{
 };
 $("vidPace").oninput=vidLabels; $("vidPad").oninput=vidLabels;
 $("vidNarr").onchange=vidVoiceVis;
+$("vidVoice").onchange=vidVoiceHint;
 $("vidPrevBtn").onclick=async()=>{
   const b=$("vidPrevBtn"), old=b.textContent;
   b.disabled=true; b.textContent="…";
   const actx=new (window.AudioContext||window.webkitAudioContext)();
   try{
-    const buf=await vidTtsBuffer(actx,"Here is how your guide will sound.",$("vidVoice").value);
+    const buf=await vidTtsBuffer(actx,"Here is how your guide will sound.",$("vidVoice").value,
+      (sub)=>{ b.textContent=sub.indexOf("%")>-1 ? sub.replace(/^.*?(\d+%)$/,"$1") : "…"; });
     const src=actx.createBufferSource(); src.buffer=buf; src.connect(actx.destination);
     await actx.resume(); src.start();
     await new Promise(r=>{ src.onended=r; setTimeout(r, buf.duration*1000+600); });
