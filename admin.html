@@ -442,7 +442,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-08-03j"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-08-03k"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -2108,7 +2108,7 @@ async function vidVoiceOptions(){
     .forEach(([id,label])=>add(gp,"piper:"+id,label));
 
   if(info.cloud && info.voices.length){
-    const gc=group("Natural — Google Cloud (key configured)");
+    const gc=group("Google Cloud — best quality (key configured)");
     info.voices.forEach(v=>add(gc,v.id,v.label));
   }
   const gb=group("Basic — quick but robotic");
@@ -2118,12 +2118,16 @@ async function vidVoiceOptions(){
   if([...sel.options].some(o=>o.value===want)) sel.value=want;
   vidVoiceHint();
 }
-// A one-line honest description of whatever voice is selected.
+// A one-line honest description of whatever voice is selected. Cloud voices
+// carry their own family label from the script (Studio / Chirp / Neural2 …), so
+// reuse that rather than guessing from the id.
 function vidVoiceHint(){
-  const v=$("vidVoice").value;
+  const sel=$("vidVoice"), v=sel.value;
+  const opt=sel.options[sel.selectedIndex];
+  const fam=(opt && opt.textContent.split("·")[1] || "").trim();
   $("vidVoiceNote").textContent = isPiper(v)
     ? "Runs in this browser · free, no setup · downloads a ~25 MB voice once, then slower to generate"
-    : /Neural2/.test(v) ? "Google Cloud Neural2 · fast and natural"
+    : fam ? `Google Cloud ${fam} · fast · counts against your Cloud free tier`
     : "Free Google voice · instant, but robotic";
 }
 function vidNarrText(s){
