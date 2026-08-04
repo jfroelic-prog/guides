@@ -382,8 +382,8 @@
       <div class="vrow"><label>Narration</label>
         <select id="vidNarr">
           <option value="recordings">My recorded voice-overs only</option>
-          <option value="tts-fill">Recordings + Google voice for the rest</option>
-          <option value="tts-all">Google voice for every step</option>
+          <option value="tts-fill">My recordings + read the rest aloud</option>
+          <option value="tts-all">Read every step aloud</option>
           <option value="silent">No sound</option>
         </select></div>
       <div class="vrow" id="vidVoiceRow"><label>Narrator voice</label>
@@ -442,7 +442,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-08-03i"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-08-03j"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
