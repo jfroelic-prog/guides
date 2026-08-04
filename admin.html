@@ -442,7 +442,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-08-03g"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-08-03h"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -2177,6 +2177,7 @@ async function vidTtsBuffer(actx,text,tl,onStatus){
 async function vidPrepare(opts, actx, onStatus){
   const steps = gifSelected.size ? ED.steps.filter(s=>gifSelected.has(s.id)) : ED.steps.slice();
   const slides=[];
+  const narrationFails=[];   // steps the voice engine couldn't speak (render continues)
   if(opts.cards) slides.push({ kind:"card", title:ED.title||"Untitled guide", sub:ED.desc||"",
     foot:ED.author?("Made by "+ED.author):"", dur:2.6 });
   let n=0, done=0;
@@ -2198,8 +2199,16 @@ async function vidPrepare(opts, actx, onStatus){
           const label=`Creating narration ${done}/${steps.length}`;
           onStatus(label+"…");
           // Piper is slow enough that its download/synthesis progress matters.
-          audio=await vidTtsBuffer(actx, text, opts.voice||"en",
-            (sub)=>onStatus(`${label} — ${sub}`));
+          // A step whose text the voice engine chokes on must NOT kill a render
+          // that may already be minutes in — that slide just stays silent, and
+          // we report which ones at the end.
+          try{
+            audio=await vidTtsBuffer(actx, text, opts.voice||"en",
+              (sub)=>onStatus(`${label} — ${sub}`));
+          }catch(e){
+            console.warn("narration failed for step:", s.title, e);
+            narrationFails.push({ title:s.title||"(untitled)", why:String(e.message||e) });
+          }
         }
       }
     }
@@ -2210,7 +2219,7 @@ async function vidPrepare(opts, actx, onStatus){
   }
   if(opts.cards) slides.push({ kind:"card", title:"Made with StepSnap", sub:"", foot:"", dur:1.6 });
   let t=0; slides.forEach(sl=>{ sl.t0=t; t+=sl.dur; });
-  return { slides, total:t };
+  return { slides, total:t, narrationFails };
 }
 
 function vidWrap(x, text, maxW, maxLines){
@@ -2365,7 +2374,7 @@ async function vidRender(opts, onStatus){
     });
     rec.stop(); await stopped;
     const type=(mime||"video/webm").split(";")[0];
-    return { blob:new Blob(chunks,{type}), type,
+    return { blob:new Blob(chunks,{type}), type, narrationFails:prep.narrationFails,
              ext:type.indexOf("mp4")>-1?"mp4":"webm", total:prep.total };
   } finally { try{ actx.close(); }catch(e){} }
 }
@@ -2436,8 +2445,12 @@ async function vidStart(){
     $("vidRun").classList.add("hidden"); $("vidDoneBox").classList.remove("hidden");
     $("vidLinkRow").style.display="none"; $("vidCopyLink").style.display="none";
     $("vidSaveLink").style.display=""; $("vidPasteLink").value="";
+    const nf=out.narrationFails||[];
     $("vidDoneNote").textContent=
-      `${(out.blob.size/1048576).toFixed(1)} MB downloaded to your computer.`;
+      `${(out.blob.size/1048576).toFixed(1)} MB downloaded to your computer.`
+      + (nf.length ? `  ⚠️ ${nf.length} step${nf.length===1?"":"s"} couldn't be narrated `
+          + `(${nf.map(f=>"“"+f.title+"”").slice(0,3).join(", ")}${nf.length>3?"…":""}) — `
+          + `those slides are silent. Try a different narrator voice, or record them yourself.` : "");
   }catch(e){
     console.error(e); vidRunning=false;
     alert("Couldn't make the video.\n\n"+(e.message||e));
