@@ -387,14 +387,10 @@
           <option value="silent">No sound</option>
         </select></div>
       <div class="vrow" id="vidVoiceRow"><label>Narrator voice</label>
-        <select id="vidVoice">
-          <option value="en">English (US)</option>
-          <option value="en-GB">English (UK)</option>
-          <option value="en-AU">English (AU)</option>
-          <option value="en-IN">English (India)</option>
-          <option value="es">Spanish</option>
-        </select>
+        <select id="vidVoice"></select>
         <button class="btn tiny" id="vidPrevBtn" type="button">🔊 Preview</button></div>
+      <div class="vrow" id="vidVoiceNoteRow"><label></label>
+        <span class="note" id="vidVoiceNote" style="font-size:12px"></span></div>
       <div class="vrow"><label>Time per silent step</label>
         <input type="range" id="vidPace" min="2" max="8" step="0.5"><span class="vval" id="vidPaceV"></span></div>
       <div class="vrow"><label>Pause after narration</label>
@@ -446,7 +442,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-08-03e"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-08-03f"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -1966,15 +1962,23 @@ function vidCollect(){
 }
 function vidPopulate(){
   const p=vidPrefs();
-  $("vidNarr").value=p.narration; $("vidVoice").value=p.voice||"en";
+  $("vidNarr").value=p.narration;
   $("vidPace").value=p.pace; $("vidPad").value=p.pad;
   $("vidRes").value=String(p.res); $("vidQ").value=p.quality;
   $("vidCap").checked=p.captions; $("vidCapD").checked=p.capDesc;
   $("vidZoom").checked=p.motion; $("vidFade").checked=p.fade; $("vidCards").checked=p.cards;
   vidLabels(); vidVoiceVis();
+  // Fill the voice list from whatever the script offers, then restore the choice.
+  vidVoiceOptions().then(()=>{
+    if(p.voice && [...$("vidVoice").options].some(o=>o.value===p.voice)) $("vidVoice").value=p.voice;
+  });
 }
 // The voice row only matters when a Google-voice mode is picked.
-function vidVoiceVis(){ $("vidVoiceRow").style.display=/^tts/.test($("vidNarr").value)?"":"none"; }
+function vidVoiceVis(){
+  const on=/^tts/.test($("vidNarr").value);
+  $("vidVoiceRow").style.display=on?"":"none";
+  $("vidVoiceNoteRow").style.display=on?"":"none";
+}
 function vidLabels(){
   $("vidPaceV").textContent=(+$("vidPace").value).toFixed(1)+"s";
   $("vidPadV").textContent=(+$("vidPad").value).toFixed(1)+"s";
@@ -2007,6 +2011,36 @@ async function vidDecodeAudio(actx, dataUrl){
        plays aloud during preparation. Unofficial endpoint; if it ever breaks,
        recorded voice-overs and silent mode are unaffected. --- */
 const vidTtsCache=new Map(); // "voice|text" → AudioBuffer (reused across renders)
+// What the site's script can do: the free translate voice (robotic, ~180 chars a
+// request) or Google Cloud Neural2 (natural, 4000 chars). Asked once per page.
+let vidTtsInfo=null;
+async function vidTtsCapabilities(){
+  if(vidTtsInfo) return vidTtsInfo;
+  const base=window.VID_TTS_URL||COUNTER_URL;
+  const fallback={ cloud:false, max:180, voices:[] };
+  if(!base||base.indexOf("http")!==0){ vidTtsInfo=fallback; return vidTtsInfo; }
+  try{
+    const r=await fetch(base+(base.indexOf("?")<0?"?":"&")+"action=ttsinfo",{cache:"no-store"});
+    const j=await r.json();
+    vidTtsInfo = (j && typeof j.max==="number") ? j : fallback;   // old script → fallback
+  }catch(e){ vidTtsInfo=fallback; }
+  return vidTtsInfo;
+}
+// Repopulate the narrator picker from whatever the script actually offers.
+async function vidVoiceOptions(){
+  const info=await vidTtsCapabilities();
+  const sel=$("vidVoice"); const want=sel.value;
+  const list = info.cloud && info.voices.length
+    ? info.voices.map(v=>[v.id, v.label])
+    : [["en","English (US)"],["en-GB","English (UK)"],["en-AU","English (AU)"],
+       ["en-IN","English (India)"],["es","Spanish"]];
+  sel.innerHTML="";
+  list.forEach(([v,l])=>{ const o=document.createElement("option"); o.value=v; o.textContent=l; sel.append(o); });
+  if([...sel.options].some(o=>o.value===want)) sel.value=want;
+  $("vidVoiceNote").textContent = info.cloud
+    ? "Natural (Google Cloud Neural2)"
+    : "Basic voice — see analytics/Code.gs to enable the natural ones";
+}
 function vidNarrText(s){
   const t=((s.title||"")+". "+(s.desc||""))
     .replace(/https?:\/\/\S+/g,"")     // don't read URLs aloud
@@ -2014,16 +2048,17 @@ function vidNarrText(s){
   return t.length>1 ? t.slice(0,600) : "";
 }
 // The voice endpoint takes ~190 chars per request — split on sentences, pack ≤180.
-function vidTtsChunks(text){
+function vidTtsChunks(text, max){
+  max = max || 180;   // translate voice ~190/request; Cloud Neural2 takes 4000
   const parts=[]; let cur="";
   for(let s of text.split(/(?<=[.!?…])\s+/)){
-    while(s.length>180){
-      let cut=s.lastIndexOf(" ",180); if(cut<40) cut=180;
+    while(s.length>max){
+      let cut=s.lastIndexOf(" ",max); if(cut<Math.min(40,max)) cut=max;
       if(cur){ parts.push(cur); cur=""; }
       parts.push(s.slice(0,cut)); s=s.slice(cut).trim();
     }
     if(!s) continue;
-    if((cur+" "+s).trim().length<=180) cur=(cur?cur+" ":"")+s;
+    if((cur+" "+s).trim().length<=max) cur=(cur?cur+" ":"")+s;
     else{ if(cur) parts.push(cur); cur=s; }
   }
   if(cur) parts.push(cur);
@@ -2043,8 +2078,11 @@ async function vidTtsBuffer(actx,text,tl){
   const base=window.VID_TTS_URL||COUNTER_URL; // VID_TTS_URL = test hook
   if(!base||base.indexOf("http")!==0)
     throw new Error("The Google-voice narrator needs the site's Apps Script (the same one that powers the view counter), and none is configured.");
+  // Cloud voices accept 4000 chars a request, the translate one ~180. Fewer,
+  // larger pieces means fewer seams, so sentences flow instead of being stitched.
+  const info=await vidTtsCapabilities();
   const bufs=[];
-  for(const chunk of vidTtsChunks(text)){
+  for(const chunk of vidTtsChunks(text, info.max)){
     const r=await fetch(base+(base.indexOf("?")<0?"?":"&")+"action=tts&tl="
       +encodeURIComponent(tl)+"&text="+encodeURIComponent(chunk),{cache:"no-store"});
     if(!r.ok) throw new Error("Narrator service error ("+r.status+").");
