@@ -442,7 +442,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-08-03k"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-08-03l"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -1945,7 +1945,7 @@ const VID_FONT='"Century Gothic",CenturyGothic,"URW Gothic","Avant Garde",Futura
 let vidCancel=false, vidRunning=false;
 
 function vidPrefs(){
-  const def={ narration:"recordings", voice:"piper:en_US-hfc_female-medium", pace:3.5, pad:0.6, res:720,
+  const def={ narration:"recordings", voice:"en-US-Studio-O", pace:3.5, pad:0.6, res:720,
               quality:"standard", captions:true, capDesc:false, motion:true,
               fade:true, cards:true };
   try{ return Object.assign(def, JSON.parse(localStorage.getItem(VID_LS)||"{}")); }
@@ -2015,9 +2015,14 @@ async function vidDecodeAudio(actx, dataUrl){
 const vidTtsCache=new Map(); // "voice|text" → AudioBuffer (reused across renders)
 
 /* --- Narrator engines. A voice's id says which one speaks it:
+     "en-US-Studio-O"                 → Google Cloud (needs a key in Code.gs)
      "piper:en_US-hfc_female-medium"  → Piper, synthesised in this browser
-     "en-US-Neural2-F"                → Google Cloud (needs a key in Code.gs)
      "en" / "en-GB"                   → Google's free translate voice
+   With a Cloud key set, Studio is the best of these by a wide margin and so
+   leads the picker; the translate voices are hidden entirely (they only show
+   up as a last resort when no key is configured). The default voice id above
+   is a Cloud one on purpose: with no key it simply is not in the list, and
+   the picker falls through to the first available option, which is Piper.
    Piper is the good free one: no key, no billing, nothing to configure. It
    downloads a ~25 MB voice model once (cached by the browser afterwards) and
    runs entirely client-side, so it also can't be blocked by a Workspace policy.
@@ -2102,18 +2107,25 @@ async function vidVoiceOptions(){
   const group=(label)=>{ const g=document.createElement("optgroup"); g.label=label; sel.append(g); return g; };
   const add=(g,v,l)=>{ const o=document.createElement("option"); o.value=v; o.textContent=l; g.append(o); };
 
-  // Piper first: the best free option, and it needs no setup at all.
-  const gp=group("Natural — made in your browser (no setup)");
+  // Best first. With a Cloud key configured, Studio beats everything else, so
+  // it leads; Piper stays as the free fallback that needs no key at all.
+  const hasCloud = info.cloud && info.voices.length;
+  if(hasCloud){
+    const gc=group("Google Cloud — best quality");
+    info.voices.forEach(v=>add(gc,v.id,v.label));
+  }
+  const gp=group(hasCloud ? "Free — made in your browser (slower)"
+                          : "Natural — made in your browser (no setup)");
   PIPER_VOICES.filter(([id])=>!piperVoiceKeys||piperVoiceKeys.has(id))
     .forEach(([id,label])=>add(gp,"piper:"+id,label));
 
-  if(info.cloud && info.voices.length){
-    const gc=group("Google Cloud — best quality (key configured)");
-    info.voices.forEach(v=>add(gc,v.id,v.label));
+  // The old robotic translate voices are only worth offering when there's
+  // nothing better configured — otherwise they're just clutter.
+  if(!hasCloud){
+    const gb=group("Basic — quick but robotic");
+    [["en","English (US)"],["en-GB","English (UK)"],["es","Spanish"]]
+      .forEach(([v,l])=>add(gb,v,l));
   }
-  const gb=group("Basic — quick but robotic");
-  [["en","English (US)"],["en-GB","English (UK)"],["en-AU","English (AU)"],
-   ["en-IN","English (India)"],["es","Spanish"]].forEach(([v,l])=>add(gb,v,l));
 
   if([...sel.options].some(o=>o.value===want)) sel.value=want;
   vidVoiceHint();
