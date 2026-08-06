@@ -442,7 +442,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-08-03l"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-08-06a"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -1670,6 +1670,29 @@ background:#fff;border:1px solid #e6decd;border-radius:12px;box-shadow:0 10px 30
 #toc a:hover{background:#f3f0e8}#toc a.active{background:#eef6f3;color:#0e6b58;font-weight:700}
 @media (max-width:920px){.page{display:block}#toc{position:fixed;top:14px;left:14px;z-index:40;flex:none;max-width:260px;padding:8px 10px}#toc h4{display:none}#toc button{display:block}#toc ol{display:none;max-height:70vh;overflow:auto;margin-top:6px}#toc.open ol{display:block}}
 @media print{#toc{display:none}}
+/* ▶ Play — an auto-advancing slideshow built from this guide's OWN steps at
+   runtime. Nothing extra is embedded: the player reuses the images and text
+   already on the page, so it costs a few KB rather than a hosted video. */
+#ssPlay{position:fixed;inset:0;z-index:60;background:#171410;display:none;flex-direction:column;color:#f6f2ea}
+#ssPlay.on{display:flex}
+#ssBar{flex:none;height:3px;background:#3a332a}
+#ssBar i{display:block;height:100%;width:0;background:#d23f31;transition:width .25s}
+#ssStage{flex:1 1 auto;min-height:0;display:grid;place-items:center;padding:16px 16px 0}
+#ssSlide{width:100%;max-width:1080px;max-height:100%;overflow:auto;text-align:center}
+#ssSlide img{width:auto;max-width:100%;max-height:58vh;margin:0 auto 15px;border-radius:10px;border:1px solid #3a332a;background:#fff}
+#ssHead{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap}
+#ssNum{flex:none;display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#d23f31;color:#fff;font-weight:700;font-size:15px}
+#ssIco{flex:none;font-size:21px;line-height:1}
+#ssTitle{font-size:22px;font-weight:700;margin:0;color:#f6f2ea}
+#ssDesc{color:#c3bbad;margin:10px auto 0;font-size:15px;max-width:760px;line-height:1.55}
+#ssSlide.ss-chapter #ssTitle{font-size:31px}
+#ssCtl{flex:none;display:flex;gap:9px;align-items:center;justify-content:center;padding:13px 14px 16px;flex-wrap:wrap}
+#ssCtl button{border:1px solid #4a4238;background:#241f19;color:#f6f2ea;font:600 15px inherit;border-radius:999px;padding:8px 16px;cursor:pointer}
+#ssCtl button:hover:not(:disabled){border-color:#d23f31}
+#ssCtl button:disabled{opacity:.4;cursor:default}
+#ssCount{color:#a89f90;font-size:13.5px;min-width:66px;text-align:center}
+@media (max-width:600px){#ssSlide img{max-height:48vh}#ssTitle{font-size:19px}#ssDesc{font-size:14px}}
+@media print{#ssPlay,#ssPlayBtn{display:none!important}}
 html{scroll-behavior:smooth}
 @media print{.step,.callout,h2.chapter{break-inside:avoid}.page{display:block}.col{max-width:none}}</style></head><body>
 <div class="page">
@@ -1776,6 +1799,171 @@ ${body}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
       b.replaceWith(f);
     });
   });
+})();
+<\/script>
+<script>
+(function(){
+  // ▶ Play as slideshow — a video-like walkthrough with no video.
+  //
+  // The slides are read out of the page that's already rendered: every .step,
+  // .callout and h2.chapter becomes one slide, reusing the very same <img> the
+  // reader would scroll past (annotations are already baked into it). So this
+  // adds no bytes per step and needs no hosting, no upload, and no render wait.
+  //
+  // A step that has a recorded voice-over plays it and advances when it ends;
+  // silent steps hold for a reading-time estimate. Arrow buttons (and the
+  // keyboard) step through manually, which pauses the auto-advance so the
+  // reader can take their time.
+  var main=document.querySelector("main.col"); if(!main) return;
+
+  var slides=[];
+  var kids=main.children;
+  for(var i=0;i<kids.length;i++){
+    var el=kids[i], cls=" "+(el.className||"")+" ";
+    if(el.tagName==="H2" && cls.indexOf(" chapter ")>=0){
+      var lead=el.nextElementSibling;
+      slides.push({ kind:"chapter", el:el, num:"", ico:"📖",
+        title:el.textContent||"",
+        desc:(lead && (" "+lead.className+" ").indexOf(" chapter-lead ")>=0) ? lead.textContent : "",
+        img:"", audio:null });
+    } else if(cls.indexOf(" callout ")>=0){
+      var ci=el.querySelector(".cico"), ch=el.querySelector("h2"), cp=el.querySelector(".ctext p"), cm=el.querySelector("img");
+      slides.push({ kind:"callout", el:el, num:"", ico:ci?ci.textContent:"",
+        title:ch?ch.textContent:"", desc:cp?cp.textContent:"",
+        img:cm?cm.getAttribute("src"):"", audio:el.querySelector("audio") });
+    } else if(cls.indexOf(" step ")>=0){
+      var sn=el.querySelector(".n"), sh=el.querySelector("h2"), sp=el.querySelector(".head p"), sm=el.querySelector("img");
+      slides.push({ kind:"step", el:el, num:sn?sn.textContent:"", ico:"",
+        title:sh?sh.textContent:"", desc:sp?sp.textContent:"",
+        img:sm?sm.getAttribute("src"):"", audio:el.querySelector("audio") });
+    }
+  }
+  if(slides.length<2) return;   // one slide isn't a slideshow
+
+  // --- the button, added next to ⬇ PDF (only now that we know there's content)
+  var btn=document.createElement("button");
+  btn.className="home"; btn.id="ssPlayBtn"; btn.type="button";
+  btn.textContent="▶ Play slideshow";
+  var pdf=document.getElementById("pdfBtn");
+  if(pdf && pdf.parentNode) pdf.parentNode.insertBefore(btn,pdf.nextSibling);
+  else main.insertBefore(btn,main.firstChild);
+
+  // --- the overlay
+  var ov=document.createElement("div");
+  ov.id="ssPlay"; ov.setAttribute("role","dialog"); ov.setAttribute("aria-label","Guide slideshow");
+  ov.innerHTML='<div id="ssBar"><i></i></div>'+
+    '<div id="ssStage"><div id="ssSlide">'+
+      '<img alt="" hidden>'+
+      '<div id="ssHead"><span id="ssNum"></span><span id="ssIco"></span><h2 id="ssTitle"></h2></div>'+
+      '<p id="ssDesc"></p>'+
+    '</div></div>'+
+    '<div id="ssCtl">'+
+      '<button type="button" id="ssPrev" aria-label="Previous step">◀</button>'+
+      '<button type="button" id="ssToggle" aria-label="Play or pause">⏸ Pause</button>'+
+      '<button type="button" id="ssNext" aria-label="Next step">▶</button>'+
+      '<span id="ssCount"></span>'+
+      '<button type="button" id="ssClose" aria-label="Close slideshow">✕ Close</button>'+
+    '</div>';
+  document.body.appendChild(ov);
+
+  var $=function(id){ return document.getElementById(id); };
+  var idx=0, playing=false, timer=null, cur=null;
+
+  // How long a silent slide holds: enough to read it, clamped to sane bounds.
+  function readMs(s){
+    var w=((s.title||"")+" "+(s.desc||"")).trim().split(/\s+/).length;
+    return Math.max(3200, Math.min(12000, 1800+w*380));
+  }
+  function stopAudio(){
+    if(cur){ try{ cur.pause(); cur.onended=null; }catch(e){} cur=null; }
+  }
+  function clearTimer(){ if(timer){ clearTimeout(timer); timer=null; } }
+
+  function render(){
+    var s=slides[idx];
+    var im=ov.querySelector("#ssSlide img");
+    if(s.img){ im.src=s.img; im.hidden=false; } else { im.removeAttribute("src"); im.hidden=true; }
+    $("ssNum").textContent=s.num; $("ssNum").style.display=s.num?"":"none";
+    $("ssIco").textContent=s.ico; $("ssIco").style.display=s.ico?"":"none";
+    $("ssTitle").textContent=s.title;
+    $("ssDesc").textContent=s.desc; $("ssDesc").style.display=s.desc?"":"none";
+    $("ssSlide").className = s.kind==="chapter" ? "ss-chapter" : "";
+    $("ssCount").textContent=(idx+1)+" / "+slides.length;
+    ov.querySelector("#ssBar i").style.width=((idx+1)/slides.length*100)+"%";
+    $("ssPrev").disabled=(idx===0);
+    $("ssNext").disabled=(idx===slides.length-1);
+  }
+  // Start whatever should carry this slide: its voice-over, or a reading timer.
+  function schedule(){
+    clearTimer(); stopAudio();
+    if(!playing) return;
+    var s=slides[idx];
+    var fallback=function(){ timer=setTimeout(advance, readMs(s)); };
+    if(s.audio){
+      cur=s.audio;
+      try{ cur.currentTime=0; }catch(e){}
+      cur.onended=function(){ if(playing) advance(); };
+      var p;
+      try{ p=cur.play(); }catch(e){ cur=null; fallback(); return; }
+      // Autoplay can be refused (e.g. when opened straight from a #play link).
+      // Fall back to the reading timer so the slideshow still advances.
+      if(p && p.catch) p.catch(function(){ stopAudio(); fallback(); });
+      return;
+    }
+    fallback();
+  }
+  function advance(){
+    if(idx>=slides.length-1){ setPlaying(false); return; }   // stop at the end
+    idx++; render(); schedule();
+  }
+  function go(n){
+    idx=Math.max(0,Math.min(slides.length-1,n));
+    setPlaying(false);                 // manual navigation means "let me read"
+    render(); clearTimer(); stopAudio();
+  }
+  function setPlaying(on){
+    playing=on;
+    $("ssToggle").textContent = on ? "⏸ Pause" : "▶ Play";
+    if(!on){ clearTimer(); stopAudio(); }
+  }
+  function open(){
+    ov.classList.add("on");
+    document.documentElement.style.overflow="hidden";
+    render(); setPlaying(true); schedule();
+    $("ssToggle").focus();
+  }
+  function close(){
+    setPlaying(false);
+    ov.classList.remove("on");
+    document.documentElement.style.overflow="";
+    if(location.hash==="#play"){
+      try{ history.replaceState(null,"",location.pathname+location.search); }catch(e){}
+    }
+    // Land the reader on the step they stopped at, rather than back at the top.
+    try{ slides[idx].el.scrollIntoView({block:"center"}); }catch(e){}
+    btn.focus();
+  }
+
+  btn.onclick=function(){ idx=0; open(); };
+  $("ssPrev").onclick=function(){ go(idx-1); };
+  $("ssNext").onclick=function(){ go(idx+1); };
+  $("ssClose").onclick=close;
+  $("ssToggle").onclick=function(){
+    if(playing){ setPlaying(false); }
+    else if(idx>=slides.length-1){ idx=0; render(); setPlaying(true); schedule(); }
+    else { setPlaying(true); schedule(); }
+  };
+  document.addEventListener("keydown",function(e){
+    if(!ov.classList.contains("on")) return;
+    if(e.key==="Escape"){ close(); }
+    else if(e.key==="ArrowRight"){ go(idx+1); }
+    else if(e.key==="ArrowLeft"){ go(idx-1); }
+    else if(e.key===" "){ e.preventDefault(); $("ssToggle").click(); }
+    else return;
+    e.stopPropagation();
+  });
+  // Sharing "…/guide.html#play" opens straight into the slideshow.
+  if(location.hash==="#play") open();
 })();
 <\/script></body></html>`;
   return { html, fileName };
