@@ -331,6 +331,7 @@
     <button class="btn tiny" id="edCopyBtn" title="Copy the whole guide — paste into Gmail, Google Docs, or Word">📋 Copy guide</button>
     <button class="btn tiny" id="edMdBtn" title="Download the guide as a Markdown file">⬇ Markdown</button>
     <button class="btn tiny" id="edVideoBtn" title="Turn the guide into a narrated video — voice-overs play over each step">🎬 Make video</button>
+    <button class="btn tiny" id="edNarrBtn" title="Read the guide aloud with a Google voice and bake it into the page, so ▶ Play slideshow narrates itself">🔊 Narrate slideshow</button>
     <button class="btn tiny" id="helpEdBtn" title="What does every button do?">❓</button>
     <button class="btn tiny" id="edSaveBtn" title="Save your progress as a draft — doesn't publish; reopen later from 📥 Drafts">💾 Save draft</button>
     <button class="btn primary tiny" id="edPublish">🚀 Publish</button>
@@ -374,6 +375,27 @@
 </div>
 
 <!-- ============ 🎬 VIDEO EXPORT ============ -->
+<div id="narOv" class="hidden">
+  <div class="vidcard">
+    <h3>🔊 Narrate the slideshow</h3>
+    <p class="note">Reads each step aloud with a Google voice and stores the audio
+      inside the guide, so <b>▶ Play slideshow</b> plays it back like a video —
+      with no video to host. Steps where you recorded your own voice-over keep
+      your recording. Re-run this after editing the words.</p>
+    <div class="vrow"><label>Narrator voice</label>
+      <select id="narVoice"></select>
+      <button class="btn tiny" id="narPrevBtn" type="button">🔊 Preview</button></div>
+    <div class="vrow"><label></label>
+      <span class="note" id="narVoiceNote" style="font-size:12px"></span></div>
+    <p class="note" id="narScope"></p>
+    <p class="note" id="narStatus"></p>
+    <div class="vbtns">
+      <button class="btn" id="narGo" type="button">🔊 Generate narration</button>
+      <button class="btn tiny" id="narClear" type="button">🗑 Remove narration</button>
+      <button class="btn tiny" id="narClose" type="button">Close</button>
+    </div>
+  </div>
+</div>
 <div id="vidOv" class="hidden">
   <div class="vidcard">
     <div id="vidSetup">
@@ -442,7 +464,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-08-06a"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-08-06b"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -1594,6 +1616,10 @@ async function edBuildExport(){
     }
     return { ...s, img: await reencodeForEmbed(s.img) };
   }));
+  // Narration is big and already rides in the page as the #ssnar bank, so keep
+  // it OUT of the embedded model — embedding it twice would double the file.
+  // edOpen recovers it from those elements when reopening the guide.
+  embedSteps.forEach(e=>{ delete e.tts; });
   const fileName=meta.file || edSlug(meta.title)+".html";
   const dataJson=JSON.stringify({ stepsnap:2, title:meta.title, desc:meta.desc, file:fileName,
     unlisted:!!meta.unlisted, author:meta.author||"", steps:embedSteps }).replace(/</g,"\\u003c");
@@ -1616,6 +1642,12 @@ async function edBuildExport(){
 <h4>📖 Chapters</h4><button id="tocToggle" type="button" aria-expanded="false">📖 Chapters</button>
 <ol>${chapters.map(c=>`<li><a href="#${c.id}">${esc(c.title)}</a></li>`).join("")}</ol>
 </nav>`:"";
+  // Baked narration for the ▶ Play slideshow, kept in ONE hidden bank keyed
+  // by step index. It cannot live inside each step because a chapter slide is
+  // an <h2>, which can't hold an <audio> child. Absent narration emits nothing.
+  const narBank=steps.map((s,i)=> s.tts
+    ? '<audio data-i="'+i+'" preload="none" src="'+s.tts+'"></audio>' : "").join("");
+  const narHtml=narBank ? '<div id="ssnar" hidden>'+narBank+'</div>' : "";
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(meta.title)||"Guide"}</title>
 <meta name="description" content="${esc(meta.desc)}">
 <meta name="robots" content="noindex, nofollow">
@@ -1692,6 +1724,7 @@ background:#fff;border:1px solid #e6decd;border-radius:12px;box-shadow:0 10px 30
 #ssCtl button:disabled{opacity:.4;cursor:default}
 #ssCount{color:#a89f90;font-size:13.5px;min-width:66px;text-align:center}
 @media (max-width:600px){#ssSlide img{max-height:48vh}#ssTitle{font-size:19px}#ssDesc{font-size:14px}}
+#ssnar{display:none}
 @media print{#ssPlay,#ssPlayBtn{display:none!important}}
 html{scroll-behavior:smooth}
 @media print{.step,.callout,h2.chapter{break-inside:avoid}.page{display:block}.col{max-width:none}}</style></head><body>
@@ -1704,7 +1737,7 @@ ${toc}
 <button class="home" id="pdfBtn" type="button">⬇ PDF</button>
 <h1>${esc(meta.title)||"Untitled guide"}</h1>${meta.desc?`<p class="lead">${esc(meta.desc)}</p>`:""}
 ${meta.author?`<p class="byline">✍️ Made by ${esc(meta.author)}</p>`:""}
-${body}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
+${body}${narHtml}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
 </main>
 </div>
 <script type="application/json" id="stepsnap-data">${dataJson}<\/script>
@@ -1868,6 +1901,10 @@ ${body}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
 
   var $=function(id){ return document.getElementById(id); };
   var idx=0, playing=false, timer=null, cur=null;
+  // Baked narration lives in one hidden bank keyed by step index; a step's
+  // OWN recorded voice-over always wins over it.
+  var narBank=document.getElementById("ssnar");
+  function narFor(i){ return narBank ? narBank.querySelector('audio[data-i="'+i+'"]') : null; }
 
   // How long a silent slide holds: enough to read it, clamped to sane bounds.
   function readMs(s){
@@ -1898,9 +1935,10 @@ ${body}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
     clearTimer(); stopAudio();
     if(!playing) return;
     var s=slides[idx];
+    var au=s.audio || narFor(idx);
     var fallback=function(){ timer=setTimeout(advance, readMs(s)); };
-    if(s.audio){
-      cur=s.audio;
+    if(au){
+      cur=au;
       try{ cur.currentTime=0; }catch(e){}
       cur.onended=function(){ if(playing) advance(); };
       var p;
@@ -2172,6 +2210,136 @@ function vidVoiceVis(){
 function vidLabels(){
   $("vidPaceV").textContent=(+$("vidPace").value).toFixed(1)+"s";
   $("vidPadV").textContent=(+$("vidPad").value).toFixed(1)+"s";
+}
+/* ===== baked slideshow narration =====================================
+   Same voices as the video export, but the audio is stored IN the guide and
+   played by the ▶ Play slideshow player. Unlike the video this costs no render
+   time and no hosting; unlike live TTS it costs characters once at publish
+   rather than on every view by every reader — which is what makes it viable
+   on a free tier. Piper is excluded: it returns WAV, roughly 10x the size of
+   Cloud's MP3, which would bloat the page badly. --- */
+
+// Narration as a data URL, ready to embed. Cloud returns base64 MP3 already,
+// which is exactly the shape we want — no decoding round-trip.
+async function narrDataUrl(text, voice){
+  if(isPiper(voice))
+    throw new Error("The in-browser (Piper) voices can't be baked into a guide — they produce "+
+      "uncompressed audio that would make the page about ten times larger. Pick a Google Cloud voice.");
+  const base=window.VID_TTS_URL||COUNTER_URL;
+  if(!base||base.indexOf("http")!==0)
+    throw new Error("Narration needs the site's Apps Script (the same one behind the view counter), and none is configured.");
+  const info=await vidTtsCapabilities();
+  const parts=[];
+  for(const chunk of vidTtsChunks(text, info.max)){
+    const r=await fetch(base+(base.indexOf("?")<0?"?":"&")+"action=tts&tl="
+      +encodeURIComponent(voice)+"&text="+encodeURIComponent(chunk),{cache:"no-store"});
+    if(!r.ok) throw new Error("Narrator service error ("+r.status+").");
+    const j=await r.json();
+    if(!j.audio) throw new Error("Narrator: "+(j.error||"no audio"));
+    parts.push(j.audio);
+  }
+  if(!parts.length) return "";
+  if(parts.length===1) return "data:audio/mpeg;base64,"+parts[0];
+  // Several pieces (only the basic voice needs this — Cloud takes 4000 chars in
+  // one go). Concatenated MP3 frames play fine in browsers.
+  const bytes=parts.map(b=>Uint8Array.from(atob(b),c=>c.charCodeAt(0)));
+  const all=new Uint8Array(bytes.reduce((n,b)=>n+b.length,0));
+  let o=0; bytes.forEach(b=>{ all.set(b,o); o+=b.length; });
+  let bin=""; for(let i=0;i<all.length;i+=0x8000) bin+=String.fromCharCode.apply(null,all.subarray(i,i+0x8000));
+  return "data:audio/mpeg;base64,"+btoa(bin);
+}
+// Steps that need narrating: everything with words, minus anything the author
+// already recorded in their own voice (that always wins).
+function narrTargets(){
+  return (ED&&ED.steps||[]).filter(s=>!s.audio && vidNarrText(s));
+}
+function narrBytes(){
+  return (ED&&ED.steps||[]).reduce((n,s)=>n+(s.tts?Math.round(s.tts.length*0.75):0),0);
+}
+function narrSize(){
+  const b=narrBytes();
+  return b>=1048576 ? (b/1048576).toFixed(1)+" MB" : Math.round(b/1024)+" KB";
+}
+function narrScope(){
+  const t=narrTargets(), chars=t.reduce((n,s)=>n+vidNarrText(s).length,0);
+  const have=(ED&&ED.steps||[]).filter(s=>s.tts).length;
+  const rec=(ED&&ED.steps||[]).filter(s=>s.audio).length;
+  $("narScope").innerHTML=
+    (t.length?`Will narrate <b>${t.length}</b> step${t.length===1?"":"s"} · about <b>${chars.toLocaleString()}</b> characters`
+             :"<b>Nothing to narrate</b> — every step either has your own recording or has no text")
+    +(rec?` · ${rec} keep${rec===1?"s":""} your recording`:"")
+    +(have?` · <b>${have}</b> already done (${narrSize()}) — generating again replaces it`:"");
+  $("narClear").style.display=have?"":"none";
+}
+function narrHint(){
+  const sel=$("narVoice"), o=sel.options[sel.selectedIndex];
+  const fam=(o&&o.textContent.split("·")[1]||"").trim();
+  $("narVoiceNote").textContent = isPiper(sel.value)
+    ? "Not usable for baked narration — pick a Google Cloud voice"
+    : fam ? `Google Cloud ${fam} · counts against your Cloud free tier, once per generate (not per viewer)`
+    : "Free Google voice · instant, but robotic";
+}
+async function narrOpen(){
+  if(!ED||!ED.steps.length){ alert("Open a guide with steps first."); return; }
+  $("narStatus").textContent=""; narrScope();
+  $("narOv").classList.remove("hidden");
+  // Reuse the video picker's option list, then drop Piper (it can't be baked).
+  const src=$("vidVoice"), dst=$("narVoice");
+  await vidVoiceOptions();
+  dst.innerHTML="";
+  [...src.querySelectorAll("optgroup")].forEach(g=>{
+    const opts=[...g.children].filter(o=>!isPiper(o.value));
+    if(!opts.length) return;
+    const ng=document.createElement("optgroup"); ng.label=g.label;
+    opts.forEach(o=>ng.append(o.cloneNode(true)));
+    dst.append(ng);
+  });
+  if(!dst.options.length){
+    $("narStatus").textContent="No bakeable voice is available — this needs a Google Cloud key in the site's Code.gs.";
+    $("narGo").disabled=true;
+  } else {
+    $("narGo").disabled=false;
+    // Saved choice first, then the US Studio default, then whatever sorts first.
+    // Without the middle step a stale saved voice drops you to the alphabetically
+    // first option, which is a UK voice.
+    const has=v=>[...dst.options].some(o=>o.value===v);
+    const want=[localStorage.getItem("stepsnapNarrVoice"),"en-US-Studio-O"].find(v=>v&&has(v));
+    if(want) dst.value=want;
+  }
+  narrHint();
+}
+async function narrGenerate(){
+  const voice=$("narVoice").value;
+  const targets=narrTargets();
+  if(!targets.length){ $("narStatus").textContent="Nothing to narrate."; return false; }
+  localStorage.setItem("stepsnapNarrVoice",voice);
+  snap();                                   // one undo entry for the whole batch
+  let done=0; const failed=[];
+  for(const st of targets){
+    $("narStatus").textContent=`Narrating step ${done+1} of ${targets.length}…`;
+    try{ st.tts=await narrDataUrl(vidNarrText(st), voice); }
+    catch(e){
+      // One unspeakable step must never throw away the rest of the batch.
+      failed.push((st.title||"untitled").slice(0,40)); console.error(e);
+      if(failed.length===1 && /needs the site|Cloud key|can't be baked/i.test(e.message)){
+        $("narStatus").textContent=e.message; return false;   // configuration problem: stop
+      }
+    }
+    done++;
+  }
+  edDirty=true; edRender(); narrScope();
+  $("narStatus").textContent = failed.length
+    ? `Narrated ${done-failed.length} of ${targets.length}. Couldn't narrate: ${failed.join(", ")}. Publish to hear the rest.`
+    : `Narrated ${done} step${done===1?"":"s"} (${narrSize()} of audio in the guide). Publish to make it live.`;
+  return true;
+}
+function narrClear(){
+  if(!confirm("Remove the baked narration from every step? Your own recorded voice-overs are not affected.")) return false;
+  snap();
+  (ED.steps||[]).forEach(s=>{ delete s.tts; });
+  edDirty=true; narrScope();
+  $("narStatus").textContent="Narration removed. Publish to update the live guide.";
+  return true;
 }
 function vidOpen(){
   if(!ED||!ED.steps.length){ alert("Open a guide with steps first."); return; }
@@ -2678,6 +2846,19 @@ async function vidStart(){
   }
 }
 $("edVideoBtn").onclick=vidOpen;
+$("edNarrBtn").onclick=narrOpen;
+$("narClose").onclick=()=>$("narOv").classList.add("hidden");
+$("narVoice").onchange=narrHint;
+$("narGo").onclick=()=>busy($("narGo"),"Narrating…","Narrated",narrGenerate);
+$("narClear").onclick=()=>busy($("narClear"),"Removing…","Removed",narrClear);
+$("narPrevBtn").onclick=async()=>{
+  const v=$("narVoice").value;
+  $("narStatus").textContent="Loading preview…";
+  try{
+    const url=await narrDataUrl("This is how the narration will sound in your guide.",v);
+    new Audio(url).play(); $("narStatus").textContent="";
+  }catch(e){ $("narStatus").textContent=e.message; }
+};
 $("vidGo").onclick=vidStart;
 $("vidCancelBtn").onclick=vidClose;
 $("vidStop").onclick=()=>{ vidCancel=true; };
@@ -2828,6 +3009,14 @@ async function edOpen(pathOrFile, isDraft){
         targets: Array.isArray(s.targets) ? s.targets
           : (s.showHl ? [{ shape:"circle", x:(typeof s.hx==="number"?s.hx:.5),
                            y:(typeof s.hy==="number"?s.hy:.5), r:(s.hr||0.045), color:"#f97316" }] : []) })) };
+    // Baked narration lives in the page's #ssnar bank rather than the data
+    // block (it's ~1 MB — embedding it twice would double the file), so read it
+    // back here or republishing would silently drop it.
+    const nb=doc.getElementById("ssnar");
+    if(nb) [...nb.querySelectorAll("audio[data-i]")].forEach(a=>{
+      const i=+a.getAttribute("data-i");
+      if(ED.steps[i]) ED.steps[i].tts=a.getAttribute("src");
+    });
     if(!ED.file) ED.file=edSlug(ED.title)+".html";
     showEditor(isDraft ? ("Draft “"+pathOrFile.replace(/^drafts\//,"")+"” — publishing will post it live and remove the draft.")
                        : ("Editing the live guide “"+pathOrFile+"” — publishing overwrites it."));
@@ -2964,6 +3153,7 @@ const HELP_EDITOR=[
   ["🗑 Delete selected","(bottom bar) delete every selected step at once"],
   ["🎞 animation speed","on ANY GIF step, a slider re-times it anytime — bigger = slower (up to 6s per frame); older GIFs are re-read automatically on first change"],
   ["🎬 Make video","turn the guide into one narrated video — your recordings play over their steps, and a Google voice can read the rest (or everything) aloud; pace, voice, captions and size are adjustable; downloads as a video file"],
+  ["🔊 Narrate slideshow","read every step aloud with a Google Cloud voice and store the audio inside the guide, so ▶ Play slideshow narrates itself like a video — with nothing to upload or host; steps where you recorded your own voice keep your recording, and re-running replaces the narration after you edit the words"],
   ["💾 Save draft","save your progress without publishing — reopen it later from 📥 Drafts"],
   ["📋 Copy guide","copy everything, formatted — paste into Gmail / Docs / Word"],
   ["⬇ Markdown","download the guide as a text file with images"],
