@@ -37,6 +37,8 @@
 
   /* topbar */
   .top{ display:flex; align-items:center; gap:10px; margin-bottom:6px; flex-wrap:wrap; }
+  .btnstack{ display:inline-flex; flex-direction:column; gap:6px; align-self:center; }
+  .btnstack .btn{ width:100%; justify-content:center; }
   .top .sp{ flex:1; }
   .sub{ color:var(--muted); margin:0 0 8px; font-size:13px; }
 
@@ -330,11 +332,13 @@
     <button class="btn tiny" id="edUndoBtn" title="Undo the last edit (Cmd/Ctrl+Z)">↩ Undo</button>
     <button class="btn tiny" id="edCopyBtn" title="Copy the whole guide — paste into Gmail, Google Docs, or Word">📋 Copy guide</button>
     <button class="btn tiny" id="edMdBtn" title="Download the guide as a Markdown file">⬇ Markdown</button>
-    <button class="btn tiny" id="edVideoBtn" title="Turn the guide into a narrated video — voice-overs play over each step">🎬 Make video</button>
+    <span class="btnstack">
+  <button class="btn tiny" id="edVideoBtn" title="Turn the guide into a narrated video — voice-overs play over each step">🎬 Make video</button>
+  <button class="btn tiny" id="edNarrBtn" title="Read the guide aloud with a Google voice and bake it into the page, so ▶ Play slideshow narrates itself">🔊 Narrate slideshow</button>
+    </span>
     <button class="btn tiny" id="helpEdBtn" title="What does every button do?">❓</button>
     <button class="btn tiny" id="edSaveBtn" title="Save your progress as a draft — doesn't publish; reopen later from 📥 Drafts">💾 Save draft</button>
     <button class="btn primary tiny" id="edPublish">🚀 Publish</button>
-    <button class="btn tiny" id="edNarrBtn" title="Read the guide aloud with a Google voice and bake it into the page, so ▶ Play slideshow narrates itself">🔊 Narrate slideshow</button>
   </div>
   <p class="sub" id="edWhere"></p>
   <div class="card gmeta">
@@ -464,7 +468,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-08-06d"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-08-06e"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -2462,8 +2466,8 @@ async function vidVoiceOptions(){
   const sel=$("vidVoice"); const want=sel.value;
   sel.innerHTML="";
   const group=(label)=>{ const g=document.createElement("optgroup"); g.label=label; sel.append(g); return g; };
-  const add=(g,v,l,fam)=>{ const o=document.createElement("option"); o.value=v; o.textContent=l;
-    if(fam) o.dataset.family=fam; g.append(o); };
+  const add=(g,v,l,fam)=>{ const o=document.createElement("option"); o.value=v;
+    o.textContent=cleanVoiceLabel(l); if(fam) o.dataset.family=cleanVoiceLabel(fam); g.append(o); };
 
   // Best first. With a Cloud key configured, Studio beats everything else, so
   // it leads; Piper stays as the free fallback that needs no key at all.
@@ -2491,6 +2495,13 @@ async function vidVoiceOptions(){
 // A one-line honest description of whatever voice is selected. Cloud voices
 // carry their own family label from the script (Studio / Chirp / Neural2 …), so
 // reuse that rather than guessing from the id.
+// Voice labels come from the Apps Script. An older copy of Code.gs can return
+// text the editor re-encoded on paste (an em dash arriving as ",Ai"), so fold
+// any non-ASCII run down to a plain separator rather than showing it raw.
+function cleanVoiceLabel(t){
+  return String(t||"").replace(/[^\x20-\x7e]+/g," - ")
+    .replace(/(\s*-\s*){2,}/g," - ").replace(/\s{2,}/g," ").trim();
+}
 // Cloud ids look like "en-US-Studio-O"; the basic translate voices are bare
 // language codes ("en", "en-GB"). Used as a fallback when an older Code.gs
 // doesn't send the family name.
