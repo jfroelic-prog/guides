@@ -177,9 +177,9 @@
   .hrow:last-child{ border-bottom:0; }
 
   /* 🎬 video export dialog */
-  #vidOv, #narOv{ position:fixed; inset:0; z-index:85; background:rgba(33,29,23,.45);
+  #vidOv, #narOv, #i18nOv{ position:fixed; inset:0; z-index:85; background:rgba(33,29,23,.45);
     display:flex; align-items:flex-start; justify-content:center; padding:6vh 16px; }
-  #vidOv.hidden, #narOv.hidden{ display:none; }
+  #vidOv.hidden, #narOv.hidden, #i18nOv.hidden{ display:none; }
   .vidcard{ background:var(--card); border:1px solid var(--line); border-radius:16px;
     box-shadow:0 18px 50px -20px rgba(0,0,0,.5); max-width:520px; width:100%; padding:18px 20px; }
   .vidcard h3{ margin:0 0 4px; font-size:17px; }
@@ -335,6 +335,7 @@
     <span class="btnstack">
   <button class="btn tiny" id="edVideoBtn" title="Turn the guide into a narrated video — voice-overs play over each step">🎬 Make video</button>
   <button class="btn tiny" id="edNarrBtn" title="Read the guide aloud with a Google voice and bake it into the page, so ▶ Play slideshow narrates itself">🔊 Narrate slideshow</button>
+  <button class="btn tiny" id="edI18nBtn" title="Add Spanish and Somali versions readers can switch to on the guide page">🌐 Translate</button>
     </span>
     <button class="btn tiny" id="helpEdBtn" title="What does every button do?">❓</button>
     <button class="btn tiny" id="edSaveBtn" title="Save your progress as a draft — doesn't publish; reopen later from 📥 Drafts">💾 Save draft</button>
@@ -379,6 +380,23 @@
 </div>
 
 <!-- ============ 🎬 VIDEO EXPORT ============ -->
+<div id="i18nOv" class="hidden">
+  <div class="vidcard">
+    <h3>🌐 Translate this guide</h3>
+    <p class="note">Adds a language switcher to the published guide, so a reader can
+      flip between English, Spanish and Somali. The words are translated by Google
+      Translate and stored in the page, so nothing is fetched when someone reads it.
+      <b>Screenshots stay in English</b> — they show the real screens the reader will see.</p>
+    <div class="vchecks" id="i18nPick"></div>
+    <p class="note" id="i18nScope"></p>
+    <p class="note" id="i18nStatus"></p>
+    <div class="vbtns">
+      <button class="btn" id="i18nGo" type="button">🌐 Translate</button>
+      <button class="btn tiny" id="i18nClear" type="button">🗑 Remove translations</button>
+      <button class="btn tiny" id="i18nClose" type="button">Close</button>
+    </div>
+  </div>
+</div>
 <div id="narOv" class="hidden">
   <div class="vidcard">
     <h3>🔊 Narrate the slideshow</h3>
@@ -468,7 +486,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-08-06e"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-08-07a"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -1590,6 +1608,9 @@ function ytId(u){
 // Per-step media (recorded voice-over + a YouTube video) for the exported guide.
 // String-concatenated (not a template literal) so it stays byte-identical to the
 // copy in export.js buildGuideExport. Absent fields render nothing.
+// Languages the guide pages can switch to. Kept in both builders so the two
+// stay byte-identical; the names are what a reader sees on the button.
+const I18N_LANGS=[{code:"es",name:"Espa\u00f1ol"},{code:"so",name:"Soomaali"}];
 function stepMediaHtml(s){
   var out="";
   if(s.audio) out+='<div class="vo"><span class="volabel">🎙 Voice-over</span>'+
@@ -1603,7 +1624,8 @@ function stepMediaHtml(s){
 /* --- build the exported/published HTML (identical shape to the extension) --- */
 async function edBuildExport(){
   const steps=ED.steps;
-  const meta={ title:ED.title, desc:ED.desc, author:ED.author, unlisted:ED.unlisted, file:ED.file };
+  const meta={ title:ED.title, desc:ED.desc, author:ED.author, unlisted:ED.unlisted,
+               file:ED.file, i18n:ED.i18n };
   const imgs=await Promise.all(steps.map(flatten));
   const thumb=await makeThumb(imgs.find(u=>u)||"");
   // Redaction has to be PERMANENT. The embedded copy is what makes a guide
@@ -1649,6 +1671,18 @@ async function edBuildExport(){
   // Baked narration for the ▶ Play slideshow, kept in ONE hidden bank keyed
   // by step index. It cannot live inside each step because a chapter slide is
   // an <h2>, which can't hold an <audio> child. Absent narration emits nothing.
+  // Baked translations for the language switcher. Text only, a few KB, so
+  // unlike the narration bank it is cheap enough to sit in the page as-is.
+  // Indexed by step position, matching the narration bank and the player.
+  const i18nPacks={}; (meta.i18n && Object.keys(meta.i18n) || []).forEach(code=>{
+    const p=meta.i18n[code]; if(p) i18nPacks[code]={ title:p.title||"", desc:p.desc||"",
+      steps:steps.map((s,i)=>({ t:(p.steps&&p.steps[i]&&p.steps[i].t)||"",
+                                d:(p.steps&&p.steps[i]&&p.steps[i].d)||"" })) };
+  });
+  const i18nHtml=Object.keys(i18nPacks).length
+    ? '<script type="application/json" id="ssi18n">'+
+      JSON.stringify({ langs:I18N_LANGS, packs:i18nPacks }).replace(/</g,"\\u003c")+
+      '<\/script>' : "";
   const narBank=steps.map((s,i)=> s.tts
     ? '<audio data-i="'+i+'" preload="none" src="'+s.tts+'"></audio>' : "").join("");
   const narHtml=narBank ? '<div id="ssnar" hidden>'+narBank+'</div>' : "";
@@ -1728,6 +1762,13 @@ background:#fff;border:1px solid #e6decd;border-radius:12px;box-shadow:0 10px 30
 #ssCtl button:disabled{opacity:.4;cursor:default}
 #ssCount{color:#a89f90;font-size:13.5px;min-width:66px;text-align:center}
 @media (max-width:600px){#ssSlide img{max-height:48vh}#ssTitle{font-size:19px}#ssDesc{font-size:14px}}
+.langbar{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}
+.langbtn{border:1px solid #e6decd;background:#fff;color:#5c5346;font:600 12.5px inherit;
+padding:5px 12px;border-radius:999px;cursor:pointer}
+.langbtn:hover{border-color:#0e6b58}
+.langbtn.on{background:#0e6b58;border-color:#0e6b58;color:#fff}
+.langnote{color:#7c7466;font-size:12.5px;margin:0 0 10px;font-style:italic}
+@media print{.langbar{display:none}}
 #ssnar{display:none}
 @media print{#ssPlay,#ssPlayBtn{display:none!important}}
 html{scroll-behavior:smooth}
@@ -1741,7 +1782,7 @@ ${toc}
 <button class="home" id="pdfBtn" type="button">⬇ PDF</button>
 <h1>${esc(meta.title)||"Untitled guide"}</h1>${meta.desc?`<p class="lead">${esc(meta.desc)}</p>`:""}
 ${meta.author?`<p class="byline">✍️ Made by ${esc(meta.author)}</p>`:""}
-${body}${narHtml}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
+${body}${narHtml}${i18nHtml}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
 </main>
 </div>
 <script type="application/json" id="stepsnap-data">${dataJson}<\/script>
@@ -1860,18 +1901,18 @@ ${body}${narHtml}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
     if(el.tagName==="H2" && cls.indexOf(" chapter ")>=0){
       var lead=el.nextElementSibling;
       slides.push({ kind:"chapter", el:el, num:"", ico:"📖",
-        title:el.textContent||"",
-        desc:(lead && (" "+lead.className+" ").indexOf(" chapter-lead ")>=0) ? lead.textContent : "",
+        tEl:el,
+        dEl:(lead && (" "+lead.className+" ").indexOf(" chapter-lead ")>=0) ? lead : null,
         img:"", audio:null });
     } else if(cls.indexOf(" callout ")>=0){
-      var ci=el.querySelector(".cico"), ch=el.querySelector("h2"), cp=el.querySelector(".ctext p"), cm=el.querySelector("img");
+      var ci=el.querySelector(".cico"), cm=el.querySelector("img");
       slides.push({ kind:"callout", el:el, num:"", ico:ci?ci.textContent:"",
-        title:ch?ch.textContent:"", desc:cp?cp.textContent:"",
+        tEl:el.querySelector("h2"), dEl:el.querySelector(".ctext p"),
         img:cm?cm.getAttribute("src"):"", audio:el.querySelector("audio") });
     } else if(cls.indexOf(" step ")>=0){
-      var sn=el.querySelector(".n"), sh=el.querySelector("h2"), sp=el.querySelector(".head p"), sm=el.querySelector("img");
+      var sn=el.querySelector(".n"), sm=el.querySelector("img");
       slides.push({ kind:"step", el:el, num:sn?sn.textContent:"", ico:"",
-        title:sh?sh.textContent:"", desc:sp?sp.textContent:"",
+        tEl:el.querySelector("h2"), dEl:el.querySelector(".head p"),
         img:sm?sm.getAttribute("src"):"", audio:el.querySelector("audio") });
     }
   }
@@ -1910,9 +1951,14 @@ ${body}${narHtml}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
   var narBank=document.getElementById("ssnar");
   function narFor(i){ return narBank ? narBank.querySelector('audio[data-i="'+i+'"]') : null; }
 
+  // Read the words off the page each time rather than caching them, so the
+  // language switcher's text shows up in the slideshow as well.
+  function slideText(s){
+    return { t:s.tEl?s.tEl.textContent:"", d:s.dEl?s.dEl.textContent:"" };
+  }
   // How long a silent slide holds: enough to read it, clamped to sane bounds.
   function readMs(s){
-    var w=((s.title||"")+" "+(s.desc||"")).trim().split(/\s+/).length;
+    var x=slideText(s), w=(x.t+" "+x.d).trim().split(/\s+/).length;
     return Math.max(3200, Math.min(12000, 1800+w*380));
   }
   function stopAudio(){
@@ -1926,8 +1972,9 @@ ${body}${narHtml}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
     if(s.img){ im.src=s.img; im.hidden=false; } else { im.removeAttribute("src"); im.hidden=true; }
     $("ssNum").textContent=s.num; $("ssNum").style.display=s.num?"":"none";
     $("ssIco").textContent=s.ico; $("ssIco").style.display=s.ico?"":"none";
-    $("ssTitle").textContent=s.title;
-    $("ssDesc").textContent=s.desc; $("ssDesc").style.display=s.desc?"":"none";
+    var x=slideText(s);
+    $("ssTitle").textContent=x.t;
+    $("ssDesc").textContent=x.d; $("ssDesc").style.display=x.d?"":"none";
     $("ssSlide").className = s.kind==="chapter" ? "ss-chapter" : "";
     $("ssCount").textContent=(idx+1)+" / "+slides.length;
     ov.querySelector("#ssBar i").style.width=((idx+1)/slides.length*100)+"%";
@@ -2006,6 +2053,84 @@ ${body}${narHtml}<p style="color:#b6ad9b;font-size:12px">Made with StepSnap</p>
   });
   // Sharing "…/guide.html#play" opens straight into the slideshow.
   if(location.hash==="#play") open();
+})();
+<\/script>
+<script>
+(function(){
+  // Language switcher. Translations are baked at publish time into the #ssi18n
+  // blob below — a few KB of text, indexed by step position exactly like the
+  // narration bank, so slide N always matches step N. Nothing is fetched at
+  // read time, so this works offline and costs a reader nothing.
+  //
+  // The screenshots stay as they are: they show the real (English) interface,
+  // which is what the reader will actually see on screen.
+  var bank=document.getElementById("ssi18n"); if(!bank) return;
+  var data; try{ data=JSON.parse(bank.textContent); }catch(e){ return; }
+  var langs=data.langs||[]; if(!langs.length) return;
+
+  var main=document.querySelector("main.col"); if(!main) return;
+  // Same walk the slideshow uses, so the two always agree on what step N is.
+  var hosts=[];
+  for(var i=0;i<main.children.length;i++){
+    var el=main.children[i], cls=" "+(el.className||"")+" ";
+    if(el.tagName==="H2" && cls.indexOf(" chapter ")>=0) hosts.push({el:el, lead:el.nextElementSibling});
+    else if(cls.indexOf(" callout ")>=0 || cls.indexOf(" step ")>=0) hosts.push({el:el, lead:null});
+  }
+
+  // Remember the original English so switching back is lossless.
+  var en={ title:(document.querySelector("h1")||{}).textContent,
+           desc:(document.querySelector(".lead")||{}).textContent,
+           steps:hosts.map(function(h){
+             var t=h.el.tagName==="H2"?h.el:h.el.querySelector("h2");
+             var d=h.lead || h.el.querySelector(".head p") || h.el.querySelector(".ctext p");
+             return { t:t?t.textContent:"", d:d?d.textContent:"" };
+           }) };
+
+  var bar=document.createElement("div");
+  bar.className="langbar"; bar.setAttribute("role","group"); bar.setAttribute("aria-label","Language");
+  var btns={};
+  function apply(code){
+    var pack = code==="en" ? en : data.packs[code];
+    if(!pack) return;
+    var h1=document.querySelector("h1"); if(h1 && pack.title) h1.textContent=pack.title;
+    var lead=document.querySelector(".lead"); if(lead && pack.desc) lead.textContent=pack.desc;
+    hosts.forEach(function(h,i){
+      var src=(pack.steps||[])[i]; if(!src) return;
+      var t=h.el.tagName==="H2"?h.el:h.el.querySelector("h2");
+      var d=h.lead || h.el.querySelector(".head p") || h.el.querySelector(".ctext p");
+      if(t && src.t) t.textContent=src.t;
+      if(d && src.d) d.textContent=src.d;
+    });
+    document.documentElement.lang = code;
+    Object.keys(btns).forEach(function(k){ btns[k].classList.toggle("on", k===code); });
+    try{ localStorage.setItem("stepsnapLang", code); }catch(e){}
+    // A machine translation shouldn't pretend to be authoritative.
+    var note=document.getElementById("langnote");
+    if(note) note.style.display = code==="en" ? "none" : "";
+  }
+  function mk(code,label){
+    var b=document.createElement("button");
+    b.type="button"; b.className="langbtn"; b.textContent=label;
+    b.onclick=function(){ apply(code); };
+    btns[code]=b; bar.appendChild(b); return b;
+  }
+  mk("en","English");
+  langs.forEach(function(l){ if(data.packs[l.code]) mk(l.code, l.name); });
+
+  var note=document.createElement("p");
+  note.id="langnote"; note.className="langnote"; note.style.display="none";
+  note.textContent="Translated automatically — the screenshots still show the English screens.";
+
+  var anchor=document.querySelector("h1");
+  if(anchor && anchor.parentNode){
+    anchor.parentNode.insertBefore(bar, anchor);
+    // Sit the note after the description and byline, so the reading order stays
+    // title -> description -> who made it -> the caveat.
+    var after=document.querySelector(".byline") || document.querySelector(".lead") || anchor;
+    after.parentNode.insertBefore(note, after.nextSibling);
+  }
+  var saved; try{ saved=localStorage.getItem("stepsnapLang"); }catch(e){}
+  apply(saved && (saved==="en" || data.packs[saved]) ? saved : "en");
 })();
 <\/script></body></html>`;
   return { html, fileName };
@@ -2215,6 +2340,91 @@ function vidLabels(){
   $("vidPaceV").textContent=(+$("vidPace").value).toFixed(1)+"s";
   $("vidPadV").textContent=(+$("vidPad").value).toFixed(1)+"s";
 }
+/* ===== baked translations ============================================
+   Translated at publish time, not on the reader's device: it costs nothing
+   per view, works offline, and means a wrong word can be hand-corrected in
+   the editor. LanguageApp on the Apps Script side needs no key and no
+   billing. Screenshots are deliberately left alone - they show the real
+   English interface the reader is looking at. --- */
+const I18N_OPTS=[{code:"es",name:"Espa\u00f1ol",label:"Spanish"},
+                 {code:"so",name:"Soomaali",label:"Somali"}];
+
+// Everything worth translating, in the exact order the builder indexes steps.
+function i18nPieces(){
+  const out=[ED.title||"", ED.desc||""];
+  (ED.steps||[]).forEach(s=>{ out.push(s.title||""); out.push(s.desc||""); });
+  return out;
+}
+async function i18nFetch(code, pieces){
+  const base=window.VID_TTS_URL||COUNTER_URL;
+  if(!base||base.indexOf("http")!==0)
+    throw new Error("Translation needs the site's Apps Script (the same one behind the view counter), and none is configured.");
+  // text/plain keeps this a "simple" request, so the browser skips the CORS
+  // preflight that Apps Script can't answer.
+  const r=await fetch(base,{ method:"POST", cache:"no-store",
+    headers:{"Content-Type":"text/plain;charset=utf-8"},
+    body:JSON.stringify({ action:"translate", tl:code, text:JSON.stringify(pieces) }) });
+  if(!r.ok) throw new Error("Translation service error ("+r.status+").");
+  const j=await r.json();
+  if(j.error) throw new Error(j.error+" — the Apps Script may need the newest Code.gs (redeploy it once, same URL).");
+  // An older Code.gs doesn't know this action and quietly falls through to the
+  // default one, answering with view counts. Name that plainly instead of
+  // reporting a vague "incomplete" failure.
+  if(!j.text && j.counts)
+    throw new Error("The site's Apps Script doesn't have translation yet. Paste the newest Code.gs "+
+      "into it and redeploy (Deploy → Manage deployments → edit → New version), then try again.");
+  if(!j.text || j.text.length!==pieces.length) throw new Error("Translation came back incomplete.");
+  return j.text;
+}
+function i18nHave(){ return Object.keys((ED&&ED.i18n)||{}); }
+function i18nScope(){
+  const n=(ED&&ED.steps||[]).length, have=i18nHave();
+  const chars=i18nPieces().reduce((a,t)=>a+t.length,0);
+  $("i18nScope").innerHTML=`${n} step${n===1?"":"s"} · about <b>${chars.toLocaleString()}</b> characters per language`
+    + (have.length?` · already translated: <b>${have.map(c=>(I18N_OPTS.find(o=>o.code===c)||{}).label||c).join(", ")}</b>`:"");
+  $("i18nClear").style.display=have.length?"":"none";
+}
+function i18nOpen(){
+  if(!ED||!ED.steps.length){ alert("Open a guide with steps first."); return; }
+  const have=i18nHave();
+  // First time through, tick everything — opening this dialog at all means you
+  // want translations, and an all-empty form just makes you click twice.
+  // Afterwards, tick what the guide already has so re-running refreshes it.
+  const on=c=>have.length ? have.indexOf(c)>=0 : true;
+  $("i18nPick").innerHTML=I18N_OPTS.map(o=>
+    `<label><input type="checkbox" class="i18nlang" value="${o.code}"${on(o.code)?" checked":""}> ${o.label} (${o.name})</label>`).join("");
+  $("i18nStatus").textContent=""; i18nScope();
+  $("i18nOv").classList.remove("hidden");
+}
+async function i18nGenerate(){
+  const codes=[...document.querySelectorAll(".i18nlang:checked")].map(c=>c.value);
+  if(!codes.length){ $("i18nStatus").textContent="Tick at least one language."; return false; }
+  const pieces=i18nPieces();
+  snap();
+  ED.i18n=ED.i18n||{};
+  const done=[];
+  for(const code of codes){
+    const label=(I18N_OPTS.find(o=>o.code===code)||{}).label||code;
+    $("i18nStatus").textContent=`Translating into ${label}…`;
+    let got;
+    try{ got=await i18nFetch(code, pieces); }
+    catch(e){ $("i18nStatus").textContent=e.message; return false; }
+    const pack={ title:got[0]||"", desc:got[1]||"", steps:[] };
+    for(let i=0;i<(ED.steps||[]).length;i++)
+      pack.steps.push({ t:got[2+i*2]||"", d:got[3+i*2]||"" });
+    ED.i18n[code]=pack; done.push(label);
+  }
+  edDirty=true; i18nScope();
+  $("i18nStatus").textContent=`Translated into ${done.join(" and ")}. Publish to make it live.`;
+  return true;
+}
+function i18nClear(){
+  if(!confirm("Remove every translation from this guide?")) return false;
+  snap(); delete ED.i18n; edDirty=true; i18nScope();
+  $("i18nStatus").textContent="Translations removed. Publish to update the live guide.";
+  return true;
+}
+
 /* ===== baked slideshow narration =====================================
    Same voices as the video export, but the audio is stored IN the guide and
    played by the ▶ Play slideshow player. Unlike the video this costs no render
@@ -2868,6 +3078,10 @@ async function vidStart(){
 }
 $("edVideoBtn").onclick=vidOpen;
 $("edNarrBtn").onclick=narrOpen;
+$("edI18nBtn").onclick=i18nOpen;
+$("i18nClose").onclick=()=>$("i18nOv").classList.add("hidden");
+$("i18nGo").onclick=()=>busy($("i18nGo"),"Translating…","Translated",i18nGenerate);
+$("i18nClear").onclick=()=>busy($("i18nClear"),"Removing…","Removed",i18nClear);
 $("narClose").onclick=()=>$("narOv").classList.add("hidden");
 $("narVoice").onchange=narrHint;
 $("narGo").onclick=()=>busy($("narGo"),"Narrating…","Narrated",narrGenerate);
@@ -3033,6 +3247,8 @@ async function edOpen(pathOrFile, isDraft){
     // Baked narration lives in the page's #ssnar bank rather than the data
     // block (it's ~1 MB — embedding it twice would double the file), so read it
     // back here or republishing would silently drop it.
+    const ib=doc.getElementById("ssi18n");
+    if(ib){ try{ const d=JSON.parse(ib.textContent); if(d && d.packs) ED.i18n=d.packs; }catch(err){} }
     const nb=doc.getElementById("ssnar");
     if(nb) [...nb.querySelectorAll("audio[data-i]")].forEach(a=>{
       const i=+a.getAttribute("data-i");
