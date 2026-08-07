@@ -175,9 +175,9 @@
   .hrow:last-child{ border-bottom:0; }
 
   /* 🎬 video export dialog */
-  #vidOv{ position:fixed; inset:0; z-index:85; background:rgba(33,29,23,.45);
+  #vidOv, #narOv{ position:fixed; inset:0; z-index:85; background:rgba(33,29,23,.45);
     display:flex; align-items:flex-start; justify-content:center; padding:6vh 16px; }
-  #vidOv.hidden{ display:none; }
+  #vidOv.hidden, #narOv.hidden{ display:none; }
   .vidcard{ background:var(--card); border:1px solid var(--line); border-radius:16px;
     box-shadow:0 18px 50px -20px rgba(0,0,0,.5); max-width:520px; width:100%; padding:18px 20px; }
   .vidcard h3{ margin:0 0 4px; font-size:17px; }
@@ -331,10 +331,10 @@
     <button class="btn tiny" id="edCopyBtn" title="Copy the whole guide — paste into Gmail, Google Docs, or Word">📋 Copy guide</button>
     <button class="btn tiny" id="edMdBtn" title="Download the guide as a Markdown file">⬇ Markdown</button>
     <button class="btn tiny" id="edVideoBtn" title="Turn the guide into a narrated video — voice-overs play over each step">🎬 Make video</button>
-    <button class="btn tiny" id="edNarrBtn" title="Read the guide aloud with a Google voice and bake it into the page, so ▶ Play slideshow narrates itself">🔊 Narrate slideshow</button>
     <button class="btn tiny" id="helpEdBtn" title="What does every button do?">❓</button>
     <button class="btn tiny" id="edSaveBtn" title="Save your progress as a draft — doesn't publish; reopen later from 📥 Drafts">💾 Save draft</button>
     <button class="btn primary tiny" id="edPublish">🚀 Publish</button>
+    <button class="btn tiny" id="edNarrBtn" title="Read the guide aloud with a Google voice and bake it into the page, so ▶ Play slideshow narrates itself">🔊 Narrate slideshow</button>
   </div>
   <p class="sub" id="edWhere"></p>
   <div class="card gmeta">
@@ -464,7 +464,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-08-06c"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-08-06d"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -2273,7 +2273,7 @@ function narrScope(){
 }
 function narrHint(){
   const sel=$("narVoice"), o=sel.options[sel.selectedIndex];
-  const fam=(o&&o.textContent.split("·")[1]||"").trim();
+  const fam=voiceFamily(o, sel.value);
   $("narVoiceNote").textContent = isPiper(sel.value)
     ? "Not usable for baked narration — pick a Google Cloud voice"
     : fam ? `Google Cloud ${fam} · counts against your Cloud free tier, once per generate (not per viewer)`
@@ -2291,7 +2291,8 @@ async function narrOpen(){
     const opts=[...g.children].filter(o=>!isPiper(o.value));
     if(!opts.length) return;
     const ng=document.createElement("optgroup"); ng.label=g.label;
-    opts.forEach(o=>ng.append(o.cloneNode(true)));
+    opts.forEach(o=>{ const c=o.cloneNode(true);
+      if(o.dataset.family) c.dataset.family=o.dataset.family; ng.append(c); });
     dst.append(ng);
   });
   if(!dst.options.length){
@@ -2461,14 +2462,15 @@ async function vidVoiceOptions(){
   const sel=$("vidVoice"); const want=sel.value;
   sel.innerHTML="";
   const group=(label)=>{ const g=document.createElement("optgroup"); g.label=label; sel.append(g); return g; };
-  const add=(g,v,l)=>{ const o=document.createElement("option"); o.value=v; o.textContent=l; g.append(o); };
+  const add=(g,v,l,fam)=>{ const o=document.createElement("option"); o.value=v; o.textContent=l;
+    if(fam) o.dataset.family=fam; g.append(o); };
 
   // Best first. With a Cloud key configured, Studio beats everything else, so
   // it leads; Piper stays as the free fallback that needs no key at all.
   const hasCloud = info.cloud && info.voices.length;
   if(hasCloud){
     const gc=group("Google Cloud — best quality");
-    info.voices.forEach(v=>add(gc,v.id,v.label));
+    info.voices.forEach(v=>add(gc,v.id,v.label,v.family));
   }
   const gp=group(hasCloud ? "Free — made in your browser (slower)"
                           : "Natural — made in your browser (no setup)");
@@ -2489,10 +2491,18 @@ async function vidVoiceOptions(){
 // A one-line honest description of whatever voice is selected. Cloud voices
 // carry their own family label from the script (Studio / Chirp / Neural2 …), so
 // reuse that rather than guessing from the id.
+// Cloud ids look like "en-US-Studio-O"; the basic translate voices are bare
+// language codes ("en", "en-GB"). Used as a fallback when an older Code.gs
+// doesn't send the family name.
+function voiceFamily(opt, id){
+  if(opt && opt.dataset.family) return opt.dataset.family;
+  const p=String(id||"").split("-");
+  return p.length>=3 ? p[2] : "";
+}
 function vidVoiceHint(){
   const sel=$("vidVoice"), v=sel.value;
   const opt=sel.options[sel.selectedIndex];
-  const fam=(opt && opt.textContent.split("·")[1] || "").trim();
+  const fam=voiceFamily(opt, v);
   $("vidVoiceNote").textContent = isPiper(v)
     ? "Runs in this browser · free, no setup · downloads a ~25 MB voice once, then slower to generate"
     : fam ? `Google Cloud ${fam} · fast · counts against your Cloud free tier`
