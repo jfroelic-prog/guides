@@ -486,7 +486,7 @@
 <script src="gif.js"></script>
 <script>
 /* ===== config ===== */
-const ADMIN_BUILD = "2026-08-07a"; // shown in the UI so a stale cached copy is instantly recognizable
+const ADMIN_BUILD = "2026-08-07b"; // shown in the UI so a stale cached copy is instantly recognizable
 const API_BASE = "https://api.github.com";
 const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzHgqaI8c8nmFz4k0knh1QnuRmoPPHdVVGnc8RbvIarQLaaGZ0m8R5C3q0tmk1lmnS9/exec";
 const LS_KEY = "stepsnapAdmin"; // { repo, enc:{salt,iv,ct} }  — encrypted token, this device only
@@ -2104,6 +2104,13 @@ ${body}${narHtml}${i18nHtml}<p style="color:#b6ad9b;font-size:12px">Made with St
     document.documentElement.lang = code;
     Object.keys(btns).forEach(function(k){ btns[k].classList.toggle("on", k===code); });
     try{ localStorage.setItem("stepsnapLang", code); }catch(e){}
+    // Keep the address bar in step, so "?lang=so" can be shared and the page's
+    // own 🔗 Copy link button hands out the language you're actually reading.
+    try{
+      var u=new URL(location.href);
+      if(code==="en") u.searchParams.delete("lang"); else u.searchParams.set("lang", code);
+      history.replaceState(null, "", u.pathname+u.search+u.hash);
+    }catch(e){}
     // A machine translation shouldn't pretend to be authoritative.
     var note=document.getElementById("langnote");
     if(note) note.style.display = code==="en" ? "none" : "";
@@ -2129,8 +2136,12 @@ ${body}${narHtml}${i18nHtml}<p style="color:#b6ad9b;font-size:12px">Made with St
     var after=document.querySelector(".byline") || document.querySelector(".lead") || anchor;
     after.parentNode.insertBefore(note, after.nextSibling);
   }
-  var saved; try{ saved=localStorage.getItem("stepsnapLang"); }catch(e){}
-  apply(saved && (saved==="en" || data.packs[saved]) ? saved : "en");
+  // A shared "?lang=so" link wins over whatever this reader last picked —
+  // someone sent them that link for a reason.
+  var want=null;
+  try{ want=new URLSearchParams(location.search).get("lang"); }catch(e){}
+  if(!want){ try{ want=localStorage.getItem("stepsnapLang"); }catch(e){} }
+  apply(want && (want==="en" || data.packs[want]) ? want : "en");
 })();
 <\/script></body></html>`;
   return { html, fileName };
